@@ -58,7 +58,7 @@ def createDirectory(directoryName)
 end
 
 # Downloads file from fileURL into targetDir. 
-# Returns false iff file already existed amd was not overwritten.
+# Returns false iff file already existed and was not overwritten.
 def downloadFileFromURL(targetDir, fileURL, username, password, override)
   #puts targetDir + " " + fileURL + " " + username + " " + password + " "
 
@@ -170,7 +170,17 @@ MODULES =
   _Module.new(
     "[220] Software Engeneering Design", # Module name
     [],  # Notes FILE_NUMBERs
-    []), # Exercises 
+    [ Exercise.new("[1 CBT] Tut 1", 62, -1, -1) ]), # Exercises 
+
+  _Module.new(
+    "[221] Compilers",
+    [ 54, 55, 56, 58, 59 ],
+    []),
+
+  _Module.new(
+    "[223] Concurrency",
+    [ 1, 2, 3, 4, 5, 6, 7, 8 ],
+    [ Exercise.new("[1 TUT] Ch 1 and 2", 1, -1, -1) ]),
 
   _Module.new(           
     "[240] Models of Computation", 
@@ -203,17 +213,7 @@ MODULES =
   _Module.new(
     "[701] Programming Competition Training", 
     [],
-    []),
-
-  _Module.new(
-    "[221] Compilers",
-    [ 54, 55, 56, 58, 59 ],
-    []),
-
-  _Module.new(
-    "[223] Concurrency",
-    [ 1, 2, 3, 4, 5, 6, 7, 8 ],
-    [ Exercise.new("[1 TUT] Ch 1 and 2", 1, -1, -1) ])
+    [])
 ]
 
 ################################################################################
