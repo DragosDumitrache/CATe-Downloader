@@ -189,8 +189,9 @@ MODULES =
 
   _Module.new(
     "[245] Statistics",                       
-    [],
-    []),
+    [ 120, 121, 133, 134 ],
+    [ Exercise.new("[2 TUT] Maths revision",      102, -1, -1),
+      Exercise.new("[3 TUT] Numerical summaries", 104, -1, -1) ]),
 
   _Module.new(
     "[261] Laboratory 2",                     
