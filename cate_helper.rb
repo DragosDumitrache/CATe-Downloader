@@ -153,7 +153,7 @@ end
 def downloadModules(folderName, student)
 
   # Create working directory  
-  workingDir = Dir.pwd + "/" + folderName + "/"
+  workingDir = Dir.pwd + "/" #+ folderName + "/"
   createDirectory(workingDir)
 
   MODULES.each do |_module|
