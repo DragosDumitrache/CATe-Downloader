@@ -37,7 +37,7 @@ Student = Struct.new(:username, :password, :year, :classes)
 # :name      => name of the module as shown on CATe
 # :noteKyes  => array of FILE_NUMBER for the note files
 # :exercises => array of Exercise structs for this module
-_Module = Struct.new(:name, :noteNums, :exercises)
+_Module = Struct.new(:name, :noteNums, :noteURLs, :exercises)
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -60,15 +60,18 @@ end
 # Downloads file from fileURL into targetDir. 
 # Returns false iff file already existed and was not overwritten.
 def downloadFileFromURL(targetDir, fileURL, username, password, override)
-  #puts targetDir + " " + fileURL + " " + username + " " + password + " "
+  # puts targetDir + " " + fileURL + " " + username + " " + password + " "
 
   # Open file from web URL, using username and password provided
   fileIn = open(fileURL, :http_basic_authentication => [username, password])
   # Extract file name using this snippet found on SO
-  fileInName = fileIn.meta['content-disposition'].match(/filename=(\"?)(.+)\1/)[2]
+  begin 
+    fileInName = fileIn.meta['content-disposition'].match(/filename=(\"?)(.+)\1/)[2]
+  rescue Exception => e
+    puts "Unable to find file name" + e.message
+  end
   # Calculate final path where file will be saved
   fileOutPath = targetDir + '/' + fileInName
-
   # If file already exists only override if true
   if (!override and File.exists?(fileOutPath)) 
     return false 
@@ -108,6 +111,15 @@ def downloadModuleNotes(moduleNotesDir, student, _module)
       puts "%2s:NOTES  #{_module.name} | Downloaded" % noteKey
     else
       puts "%2s:NOTES  #{_module.name} | Already exists!" % noteKey
+    end
+  end
+  return
+  _module.noteURLs.each do |noteURL|
+    puts "NOTE URL: " + noteURL
+    if (downloadFileFromURL(moduleNotesDir, noteURL, student.username, student.password, false))
+      puts "Ur:NOTES  #{_module.name} | Downloaded"
+    else
+      puts "Ur:NOTES  #{_module.name} | Already exists!"
     end
   end
 end
@@ -170,49 +182,62 @@ MODULES =
   _Module.new(
     "[220] Software Engeneering Design", # Module name
     [],  # Notes FILE_NUMBERs
+    [ "http://www.doc.ic.ac.uk/~rbc/220/handouts/1-introduction.pdf",
+      "http://www.doc.ic.ac.uk/~rbc/220/handouts/2-tdd-refactoring.pdf" ],
     [ Exercise.new("[1 CBT] Tut 1", 62, -1, -1) ]), # Exercises 
 
   _Module.new(
     "[221] Compilers",
     [ 54, 55, 56, 58, 59 ],
-    []),
+    [ "https://www.doc.ic.ac.uk/~nd/compilers/01_LexicalAnalysis.pdf",
+      "https://www.doc.ic.ac.uk/~nd/compilers/02_BottomUp.pdf" ],
+    [ Exercise.new("[1 CW] WACC Language Specification", 150, -1, -1) ]),
 
   _Module.new(
     "[223] Concurrency",
     [ 1, 2, 3, 4, 5, 6, 7, 8 ],
-    [ Exercise.new("[1 TUT] Ch 1 and 2", 1, -1, -1) ]),
+    [],
+    [ Exercise.new("[1 TUT] Ch 1 and 2", 1, -1, -1),
+      Exercise.new("[2 TUT] Ch 3",       3, -1, -1) ]),
 
   _Module.new(           
     "[240] Models of Computation", 
     [],
+    [ "https://s3.amazonaws.com/piazza-resources/i0z753alu2mkr/i19n08jm21d1fw/lecture1.pdf?AWSAccessKeyId=AKIAJKOQYKAYOBKKVTKQ&Expires=1413684333&Signature=sOnL8nla5TzAjOK05vFAoDkkG3c%3D", 
+      "https://s3.amazonaws.com/piazza-resources/i0z753alu2mkr/i1c0ibu2z5y3yr/lecture2.pdf?AWSAccessKeyId=AKIAJKOQYKAYOBKKVTKQ&Expires=1413684357&Signature=F%2FmNbOH381DjjcHOpOi8Yir872c%3D" ],
     []),
 
   _Module.new(
     "[245] Statistics",                       
-    [ 120, 121, 133, 134 ],
+    [ 120, 121, 133, 134 ], 
+    [],
     [ Exercise.new("[2 TUT] Maths revision",      102, -1, -1),
       Exercise.new("[3 TUT] Numerical summaries", 104, -1, -1) ]),
 
   _Module.new(
     "[261] Laboratory 2",                     
+    [], 
     [],
     [ Exercise.new("[1 LAB] Linkload",   37, -1, -1),
       Exercise.new("[2 LAB] C++ Enigma", 59, -1, -1) ]),
 
   _Module.new(
     "[275] C++ Introduction",                 
-    [ 34 ],
+    [ 34 ],  
+    [],
     [ Exercise.new("[1 TUT] Lab 1", 40, 43, 46),
       Exercise.new("[2 TUT] Lab 2", 41, 44, 47),
       Exercise.new("[3 TUT] Lab 3", 42, 45, 48) ]),
 
   _Module.new(
     "[276] Introdution to Prolog",            
+    [],  
     [],
     []),
 
   _Module.new(
     "[701] Programming Competition Training", 
+    [],
     [],
     [])
 ]
