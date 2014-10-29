@@ -185,21 +185,25 @@ MODULES =
     [ "http://www.doc.ic.ac.uk/~rbc/220/handouts/1-introduction.pdf",
       "http://www.doc.ic.ac.uk/~rbc/220/handouts/2-tdd-refactoring.pdf" ],
     [ Exercise.new("[1 CBT] Tut 1",  62, -1, -1),
-      Exercise.new("[2 CBT] Tut 2", 112, -1, -1) ]), # Exercises 
+      Exercise.new("[2 CBT] Tut 2", 112, -1, -1),
+      Exercise.new("[3 CBT] Tut 3", 230, -1, -1) ]), # Exercises 
 
   _Module.new(
     "[221] Compilers",
     [ 54, 55, 56, 58, 59, 186, 187, 189 ],
     [ "https://www.doc.ic.ac.uk/~nd/compilers/01_LexicalAnalysis.pdf",
       "https://www.doc.ic.ac.uk/~nd/compilers/02_BottomUp.pdf" ],
-    [ Exercise.new("[1 CW] WACC Language Specification", 150, -1, -1) ]),
+    [ Exercise.new("[1 CW] WACC Language Specification", 150, -1, -1),
+      Exercise.new("[2 CW] HaskellFunctionCalls",        264, -1, -1) ]),
 
   _Module.new(
     "[223] Concurrency",
     [ 1, 2, 3, 4, 5, 6, 7, 8 ],
     [],
     [ Exercise.new("[1 TUT] Ch 1 and 2", 1, -1,  2),
-      Exercise.new("[2 TUT] Ch 3",       3, -1, -1) ]),
+      Exercise.new("[2 TUT] Ch 3",       3, -1,  4),
+      Exercise.new("[3 TUT] Ch 4 and 5", 5, -1, -1),
+      Exercise.new("[4 CW] CW 1",        7, -1, -1) ]),
 
   _Module.new(           
     "[240] Models of Computation", 
@@ -210,18 +214,20 @@ MODULES =
 
   _Module.new(
     "[245] Statistics",                       
-    [ 120, 121, 133, 134 ], 
+    [ 120, 121, 133, 134, 224 ], 
     [],
-    [ Exercise.new("[2 TUT] Maths revision",      102, -1, -1),
-      Exercise.new("[3 TUT] Numerical summaries", 104, -1, -1),
-      Exercise.new("[4 TUT] Probability",         202, -1, -1) ]),
+    [ Exercise.new("[2 TUT] Maths revision",      102, -1, 103),
+      Exercise.new("[3 TUT] Numerical summaries", 104, -1, 105),
+      Exercise.new("[4 TUT] Probability",         202, -1,  -1),
+      Exercise.new("[5 TUT] Further Probability", 220, -1,  -1), ]),
 
   _Module.new(
     "[261] Laboratory 2",                     
     [], 
     [],
-    [ Exercise.new("[1 LAB] Linkload",   37, -1, -1),
-      Exercise.new("[2 LAB] C++ Enigma", 59, -1, -1) ]),
+    [ Exercise.new("[1 LAB] Linkload",          37, -1, -1),
+      Exercise.new("[2 LAB] C++ Enigma",        59, -1, -1),
+      Exercise.new("[3 LAB] WACC - Front End", 226, -1, -1) ]),
 
   _Module.new(
     "[275] C++ Introduction",                 
