@@ -248,21 +248,24 @@ MODULES =
       "http://www.doc.ic.ac.uk/~rbc/220/handouts/16-system-integration.pdf",
       "http://www.doc.ic.ac.uk/~rbc/220/handouts/17-distribution.pdf",
       "http://www.doc.ic.ac.uk/~rbc/220/handouts/18-revision.pdf" ],
-    [ Exercise.new("[1 CBT] Tut 1",  62, -1, -1),
-      Exercise.new("[2 CBT] Tut 2", 112, -1, -1),
-      Exercise.new("[3 CBT] Tut 3", 230, -1, -1),
-      Exercise.new("[4 CBT] Tut 4", 323, -1, -1),
-      Exercise.new("[5 CBT] Tut 5", 399, -1, -1),
-      Exercise.new("[6 CBT] Tut 6", 461, -1, -1),
-      Exercise.new("[7 CBT] Tut 7", 526, -1, -1),
-      Exercise.new("[8 CBT] Tut 8", 568, -1, -1) ], # Exercises
+    [ Exercise.new("[1 CBT] TUT 1",  62, -1, -1),
+      Exercise.new("[2 CBT] TUT 2", 112, -1, -1),
+      Exercise.new("[3 CBT] TUT 3", 230, -1, -1),
+      Exercise.new("[4 CBT] TUT 4", 323, -1, -1),
+      Exercise.new("[5 CBT] TUT 5", 399, -1, -1),
+      Exercise.new("[6 CBT] TUT 6", 461, -1, -1),
+      Exercise.new("[7 CBT] TUT 7", 526, -1, -1),
+      Exercise.new("[8 CBT] TUT 8", 568, -1, -1) ], # Exercises
     []), # Piazza Exercises
 
   _Module.new(
     "[221] Compilers",
-    [ 54, 55, 56, 58, 59, 186, 187, 189 ],
+    [ 54, 55, 56, 58, 59, 186, 187, 189, 294, 297, 416, 417 ],
     [ "https://www.doc.ic.ac.uk/~nd/compilers/01_LexicalAnalysis.pdf",
-      "https://www.doc.ic.ac.uk/~nd/compilers/02_BottomUp.pdf" ],
+      "https://www.doc.ic.ac.uk/~nd/compilers/02_BottomUp.pdf",
+      "https://www.doc.ic.ac.uk/~nd/compilers/03_TopDown.pdf",
+      "https://www.doc.ic.ac.uk/~nd/compilers/04_SemanticAnalysis.pdf",
+      "https://www.doc.ic.ac.uk/~nd/compilers/05_RuntimeOrganisation.pdf" ],
     [ Exercise.new("[1 CW] WACC Language Specification", 150, -1, -1),
       Exercise.new("[2 CW] HaskellFunctionCalls",        264, -1, -1) ],
     []),
@@ -366,7 +369,7 @@ begin
   password = gets.chomp
   system "stty echo"
   puts ""
-  puts "Fetching everything you need to succeed, this might take a while"
+  puts "Fetching everything you need to succeed... This might take a while, please be patient!"
   student = Student.new(username, password, "2014", "c2")
 
   downloadModules("CATe Autumn Term 2014-2015", student) 

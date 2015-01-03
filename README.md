@@ -12,4 +12,4 @@ Courtesy of Mearlboro and Zemellino for creating the original script.
 
 #TODO:
   - Add support for downloading multiple data files
-
+  - Check CATe credentials before any downloads commence
