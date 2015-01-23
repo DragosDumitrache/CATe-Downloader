@@ -1,6 +1,11 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 
 require 'open-uri'
+require 'mechanize'
+require 'date'
+require 'nokogiri'
+require 'io/console'
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # CATe uses the following URL format to dispense files:     
 # https://cate.doc.ic.ac.uk/showfile.cgi?key=CATE_MAGIC_KEY  
@@ -25,7 +30,7 @@ require 'open-uri'
 # This represents an Imperial College student
 #
 # :username => IC account username
-# :password => IC account password     - needed for downloading files off CATe
+# :password => IC account password     - needed for downloading files from CATe
 # :year     => current year on CATe    - 2014 (?)
 # :classes  => either Computing or JMC - one of c1, c2, c3, j1, j2, j3 
 Student = Struct.new(:username, :password, :year, :classes)
@@ -63,7 +68,7 @@ def downloadFileFromURL(targetDir, fileURL, student, override, fileInName)
   # puts targetDir + " " + fileURL + " " + username + " " + password + " "
 
   # Open file from web URL, using username and password provided
-
+  # credentials = open("http://cate.doc.ic.ac.uk", :http_basic_authentication => [student.username, student.password])
   fileIn = open(fileURL, :http_basic_authentication => [student.username, student.password])
   if(fileInName == "")
     # Extract file name using this snippet found on SO
@@ -87,281 +92,93 @@ def downloadFileFromURL(targetDir, fileURL, student, override, fileInName)
   end
 end
 
-
-def downloadCATeFile(targetDir, student, fileNumber, fileType)
-  return downloadFileFromURL(
-    targetDir,
-    getCATeFileURL(student, fileNumber, fileType),
-    student,
-    false,
-    "")
-end
-
-
-def getCATeFileURL(student, fileNumber, fileType)
-  return "https://cate.doc.ic.ac.uk/showfile.cgi?key=%s:%s:%s:%s:%s:%s" % [
-    student.year, 
-    "1", 
-    fileNumber, 
-    student.classes,
-    fileType,
-    student.username]
-end
-
-def download_piazza_file(target_dir, file_id, student, file_in_name)
-  return downloadFileFromURL(
-    target_dir,
-    get_piazza_URL(file_id),
-    student,
-    false,
-    file_in_name)
-end 
-
-def get_piazza_URL(file_id)
-  return "https://piazza.com/class_profile/get_resource/i0z753alu2mkr/" + file_id
-end
-
-
-def downloadModuleNotes(moduleNotesDir, student, _module)
-   sizel = 42 - _module.name.length
-  if(!_module.noteNums.empty?)
-    _module.noteNums.each do |noteKey|
-      if (downloadCATeFile(moduleNotesDir, student, noteKey, "NOTES"))
-        puts "%3s:NOTES\t#{_module.name}%#{sizel}s|%10sDownloaded!" % [noteKey, "",""]
-      else
-        puts "%3s:NOTES\t#{_module.name}%#{sizel}s|%6sAlready exists!" % [noteKey, "", ""]
+def download_notes(agent, links, student)
+  # exercises = $page.parser.xpath('//b//font//a[contains(text(), "View exercise specification")]').map{|link| link['href']}
+  links.each do |link, exercises|
+    notes_page = agent.get(link)
+    module_name = notes_page.parser.xpath('//center//h3//b')
+    module_name = module_name[module_name.size - 1].inner_html
+    module_number = module_name.split(":")
+    directory_name = "[" + module_number[0] + "] " + module_number[1] 
+    working_dir = Dir.pwd
+    createDirectory(working_dir) 
+    Dir.chdir(working_dir)
+    createDirectory(directory_name)
+    Dir.chdir(directory_name)
+    print_equal
+    puts "\nFetching the notes for #{module_name}..."
+    print_equal
+    notes_dir = "Notes"
+    createDirectory(notes_dir)
+    notes = notes_page.parser.xpath('//a[contains(@href, "showfile.cgi?key")]|//a[contains(@title, "doc.ic.ac.uk")]|//a[contains(@title, "resources")]')
+    notes.each do |note|
+      if(note['href'] == '')
+        note_url = open(note['title'], :http_basic_authentication => [student.username, student.password])
+        ########################################################################
+        ########################################################################
+        ##########  If the url points to a pdf => download it ##################
+        ##########       Else, redirect & parse for urls      ##################
+        ########################################################################
+        ########################################################################
+        if(note_url.content_type == "application/pdf") 
+          puts "Fetching #{note.text()}.pdf..."
+          if(downloadFileFromURL(notes_dir, note['title'], student, false, note.text() + ".pdf"))
+            puts "\t...Succes, saved as #{note.text()}.pdf"
+          else 
+            puts "\t...Skip, #{note.text()}.pdf already exists"
+          end
+        else
+          # check for Dulay's Notes
+          download_external_notes(notes_dir, note['title'], student)
+        end
+      else # Download local notes
+        puts "Fetching #{note.text()}.pdf..."
+        # if(!note['href'].start_with?("http"))
+        #   local_note = notes_page.uri.merge(note['href'])
+        #   puts "Relative"
+        # else 
+        #   puts "Absolute"
+        #   local_note = note['href']
+        # end
+        local_note = "https://cate.doc.ic.ac.uk/" + note['href']
+        if(downloadFileFromURL(notes_dir, local_note, student, false, note.text() + ".pdf"))
+          puts "\t...Succes, saved as #{note.text()}.pdf"
+        else 
+          puts "\t...Skip, #{note.text()}.pdf already exists"
+        end
       end
     end
+    Dir.chdir(working_dir)
   end
-  if(!_module.noteURLs.empty?)
-    _module.noteURLs.each do |noteURL|
-      # puts "NOTE URL:\t" + noteURL
-      if (downloadFileFromURL(moduleNotesDir, noteURL, student, false, ""))
-        puts "Ur:NOTES\t#{_module.name}%#{sizel}s|%10sDownloaded!" % ["", ""]
-      else
-        puts "Ur:NOTES\t#{_module.name}%#{sizel}s|%6sAlready exists!" % ["", ""]
-      end
+end # End download_notes(links)
+
+def download_external_notes(notes_dir, link, student)
+  agent = Mechanize.new
+  agent.add_auth(link, student.username, student.password)
+  external_page = agent.get(link)
+  local_notes = external_page.parser.xpath('//a[contains(text(), "Slides")]|//a[@class="resource_title"]').map{ |link| link['href']  }
+  local_notes.each do |local_note| 
+    file_name = File.basename(URI.parse(local_note).path)
+    puts "Fetching #{file_name}..."
+    if(downloadFileFromURL(notes_dir, local_note, student, false, file_name))
+      puts "\t...Succes, saved as #{file_name}.pdf"
+    else 
+      puts "\t...Skip, #{file_name}.pdf already exists"
     end
   end
 end
 
-
-def downloadExercise(exerciseDir, student, exercise)
-  sizel = 42 - exercise.name.length
-  if (downloadCATeFile(exerciseDir, student, exercise.specsNum, "SPECS"))
-    puts "%3s:SPECS\t#{exercise.name}%#{sizel}s|%10sDownloaded!" % [exercise.specsNum, "", ""]
-  else
-    puts "%3s:SPECS\t#{exercise.name}%#{sizel}s|%6sAlready exists!" % [exercise.specsNum , "", ""]
+def print_equal
+  for i in 1..$cols
+    print "="
   end
-
-  if (exercise.dataNum != -1)
-    if (downloadCATeFile(exerciseDir, student, exercise.dataNum, "DATA" ))
-      puts "%3s:DATA\t#{exercise.name}%#{sizel}s|%10sDownloaded!" % [exercise.dataNum, "", ""]
-    else
-      puts "%3s:DATA\t#{exercise.name}%#{sizel}s|%6sAlready exists!" % [exercise.dataNum, "", ""]
-    end
-  end 
-
-  if (exercise.modelNum != -1)
-    if (downloadCATeFile(exerciseDir, student, exercise.modelNum, "MODELS"))
-      puts "%3s:MODELS\t#{exercise.name}%#{sizel}s|%10sDownloaded!" % [exercise.modelNum, "", ""]
-    else
-      puts "%3s:MODELS\t#{exercise.name}%#{sizel}s|%6sAlready exists!" % [exercise.modelNum, "", ""]
-    end
-  end
-end
-
-def download_piazza_exercise(exercise_dir, student, exercise)
-  sizel = 42 - exercise.name.length
-  if (download_piazza_file(exercise_dir, exercise.specsNum, student, "Tut " + exercise.name + ".pdf"))
-    puts "Ur:SPECS\t#{exercise.name}%#{sizel}s|%10sDownloaded!" % ["", ""]
-  else
-    puts "Ur:SPECS\t#{exercise.name}%#{sizel}s|%6sAlready exists!" % ["", ""]
-  end
-  if (exercise.dataNum != -1)
-    if (download_piazza_file(exercise_dir, exercise.dataNum, student, "Data " + exercise.name + ".pdf" ))
-      puts "Ur:DATA\t#{exercise.name}%#{sizel}s|%10sDownloaded!" % ["", ""]
-    else
-      puts "Ur:DATA\t#{exercise.name}%#{sizel}s|%6sAlready exists!" % ["", ""]
-    end
-  end 
-  if (exercise.modelNum != -1)
-    if (download_piazza_file(exercise_dir, exercise.modelNum, student, "Answers " + exercise.name + ".pdf"))
-      puts "Ur:MODELS\t#{exercise.name}%#{sizel}s|%10sDownloaded!" % ["", ""]
-    else
-      puts "Ur:MODELS\t#{exercise.name}%#{sizel}s|%6sAlready exists!" % ["", ""]
-    end
-  end
-end
-
-
-def downloadModules(folderName, student)
-  # Create working directory  
-  workingDir = Dir.pwd + "/" #+ folderName + "/"
-  createDirectory(workingDir)
-  MODULES.each do |_module|
-    Dir.chdir(workingDir)
-    createDirectory(_module.name)
-    # Notes
-    notesDir = _module.name + "/Notes"
-    createDirectory(notesDir)
-    downloadModuleNotes(notesDir, student, _module)
-    if(!_module.exercises.empty?)
-      _module.exercises.each do |exercise|
-        # Exercises
-        exerciseDir = _module.name + "/" + exercise.name
-        createDirectory(exerciseDir)
-        downloadExercise(exerciseDir, student, exercise)
-      end  
-    end
-    if(!_module.piazza_exercises.empty?) 
-      _module.piazza_exercises.each do |exercise|
-        exerciseDir = _module.name + "/" + exercise.name
-        createDirectory(exerciseDir)
-        download_piazza_exercise(exerciseDir, student, exercise)
-      end
-    end
-  end
-end
-
-################################################################################
-
-MODULES =
-[
-  _Module.new(
-    "[220] Software Engeneering Design", # Module name
-    [],  # Notes FILE_NUMBERS
-    [ "http://www.doc.ic.ac.uk/~rbc/220/handouts/1-introduction.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/2-tdd-refactoring.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/4-mocks.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/5-TDA.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/6-reuse.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/7-metrics.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/8-hofs.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/9-mapreduce.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/10-concurrency.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/11-pub-sub.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/12-creation.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/13-seams-sensing.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/14-interactive.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/15-webapps.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/16-system-integration.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/17-distribution.pdf",
-      "http://www.doc.ic.ac.uk/~rbc/220/handouts/18-revision.pdf" ],
-    [ Exercise.new("[1 CBT] TUT 1",  62, -1, -1),
-      Exercise.new("[2 CBT] TUT 2", 112, -1, -1),
-      Exercise.new("[3 CBT] TUT 3", 230, -1, -1),
-      Exercise.new("[4 CBT] TUT 4", 323, -1, -1),
-      Exercise.new("[5 CBT] TUT 5", 399, -1, -1),
-      Exercise.new("[6 CBT] TUT 6", 461, -1, -1),
-      Exercise.new("[7 CBT] TUT 7", 526, -1, -1),
-      Exercise.new("[8 CBT] TUT 8", 568, -1, -1) ], # Exercises
-    []), # Piazza Exercises
-
-  _Module.new(
-    "[221] Compilers",
-    [ 54, 55, 56, 58, 59, 186, 187, 189, 294, 297, 416, 417 ],
-    [ "https://www.doc.ic.ac.uk/~nd/compilers/01_LexicalAnalysis.pdf",
-      "https://www.doc.ic.ac.uk/~nd/compilers/02_BottomUp.pdf",
-      "https://www.doc.ic.ac.uk/~nd/compilers/03_TopDown.pdf",
-      "https://www.doc.ic.ac.uk/~nd/compilers/04_SemanticAnalysis.pdf",
-      "https://www.doc.ic.ac.uk/~nd/compilers/05_RuntimeOrganisation.pdf" ],
-    [ Exercise.new("[1 CW] WACC Language Specification", 150, -1, -1),
-      Exercise.new("[2 CW] HaskellFunctionCalls",        264, -1, -1) ],
-    []),
-
-  _Module.new(
-    "[223] Concurrency",
-    [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 ],
-    [],
-    [ Exercise.new("[1 TUT] Ch 1 and 2", 1, -1,  2),
-      Exercise.new("[2 TUT] Ch 3",       3, -1,  4),
-      Exercise.new("[3 TUT] Ch 4 and 5", 5, -1, 6),
-      Exercise.new("[4 CW] CW 1",        7, -1, -1),
-      Exercise.new("[5 TUT] Ch 6", 10, -1, 9),
-      Exercise.new("[6 TUT] Ch 7", 11, -1, 12),
-      Exercise.new("[7 CW] CW 2", 13, 15, -1) ],
-    []),
-
-  _Module.new(           
-    "[240] Models of Computation", 
-    [],
-    [ "https://piazza.com/class_profile/get_resource/i0z753alu2mkr/i19n08jm21d1fw", 
-      "https://piazza.com/class_profile/get_resource/i0z753alu2mkr/i1c0ibu2z5y3yr",
-      "https://piazza.com/class_profile/get_resource/i0z753alu2mkr/i24fe7asmi81cs",
-      "https://piazza.com/class_profile/get_resource/i0z753alu2mkr/i2eim9e212l4s4",
-      "https://piazza.com/class_profile/get_resource/i0z753alu2mkr/i2f983myleq1o9",
-      "https://piazza.com/class_profile/get_resource/i0z753alu2mkr/i2xtq0ie6961x",
-      "https://piazza.com/class_profile/get_resource/i0z753alu2mkr/i38ir5cmf18363",
-      "https://piazza.com/class_profile/get_resource/i0z753alu2mkr/i3a2xb25m4l27m",
-      "https://piazza.com/class_profile/get_resource/i0z753alu2mkr/i3k18f71dtr2xn" ],
-    [],
-    [ Exercise.new("[1 CW] CW 1", "i257sx7j32mhr", -1, "i3izldiaqlk6nd"),
-      Exercise.new("[2 CW] CW 2", "i37vi1gl2j76x7", -1, -1),
-      Exercise.new("1: Expressions", "i1aj65c0wzn2nj", -1, "i1hzzj582ba25m"),
-      Exercise.new("2: State", "i1t71ggkvxw7b0", -1, "i1ut463yyxt5b"),
-      Exercise.new("3: Induction", "i21s0yii5r1d6", -1, "i2dkvyqhc064ly"),
-      Exercise.new("4: Register Machine", "i2oj11iagqc61d", -1, "i2wew6m5c6nr9"),
-      Exercise.new("5: Universal Register Machine", "i2wex4jnf441rp", -1, "i30h9cnr9ln66j"),
-      Exercise.new("6: Turing Machines", "i3iyl6br7078x", -1, "i3iynypfk5u20q"),
-      Exercise.new("7: Lambda Calculus 1", "i3iylnzfozrg1", -1, "i3iyo84aid96hl"),
-      Exercise.new("8: Lambda Calculus 2", "i3iylwk5oz27oj", -1, "i3iyok8nobk6mb") ]),
-
-  _Module.new(
-    "[245] Statistics",                       
-    [ 120, 121, 133, 134, 224 , 273, 321, 375, 406, 457, 250], 
-    [],
-    [ Exercise.new("[2 TUT] Maths revision",      102, -1, 103),
-      Exercise.new("[3 TUT] Numerical summaries", 104, -1, 105),
-      Exercise.new("[4 TUT] Probability",         202, -1, 203),
-      Exercise.new("[5 TUT] Further Probability", 220, -1, 221),
-      Exercise.new("[6 TUT] Discrete Random Variables", 287, -1, 288),
-      Exercise.new("[7 TUT] Continuous Random Variables", 353, -1, 354),
-      Exercise.new("[8 TUT] Example question for Feedback", 384, -1, 604),
-      Exercise.new("[10 TUT] Estimation", 491, -1, 490),
-      Exercise.new("[1 CW] Statistics coursework", 418, -1, -1),
-      Exercise.new("[11 TUT] Hypothesis Testing", 541, -1, 542),
-      Exercise.new("[12 TUT] Reliability", 658, -1, 659) ],
-    []),
-
-  _Module.new(
-    "[261] Laboratory 2",                     
-    [], 
-    [],
-    [ Exercise.new("[1 LAB] Linkload",          37, -1, -1),
-      Exercise.new("[2 LAB] C++ Enigma",        59, -1, -1),
-      Exercise.new("[3 LAB] WACC - Front End", 226, -1, -1),
-      Exercise.new("[4 LAB] WACC - Back End", 227, -1, -1),
-      Exercise.new("[5 LAB] WACC - Extension", 335, -1, -1) ],
-    []),
-
-  _Module.new(
-    "[275] C++ Introduction",                 
-    [ 34 ],  
-    [],
-    [ Exercise.new("[1 TUT] Lab 1", 40, 43, 46),
-      Exercise.new("[2 TUT] Lab 2", 41, 44, 47),
-      Exercise.new("[3 TUT] Lab 3", 42, 45, 48) ],
-    []),
-
-  _Module.new(
-    "[276] Introduction to Prolog",            
-    [ 343, 486, 487, 488, 489, 490 ],  
-    [],
-    [],
-    []),
-
-  _Module.new(
-    "[701] Programming Competition Training", 
-    [],
-    [],
-    [],
-    [])
-]
-
-################################################################################
+end # End print_equal
 
 begin
+
+################################################################################
+#########################          CATe Login        ###########################
+################################################################################
   print "IC username: "
   username = gets.chomp
   print "IC password: "
@@ -369,11 +186,49 @@ begin
   password = gets.chomp
   system "stty echo"
   puts ""
-  puts "Fetching everything you need to succeed... This might take a while, please be patient!"
-  student = Student.new(username, password, "2014", "c2")
+  print "Class: " 
+  classes = gets.chomp
+  print "1 = Autumn\t2 = Christmas\t3 = Spring\t4 = Easter\t5 = Summer\nPeriod: "
+  period = gets.chomp
+  print "Academic year: "
+  year = gets.chomp
+  student = Student.new(username, password, year, classes)
+  $rows, $cols = IO.console.winsize
+  begin
+    agent = Mechanize.new
+    agent.add_auth('https://cate.doc.ic.ac.uk/' ,student.username, student.password, nil, "https://cate.doc.ic.ac.uk")
+    $page = agent.get("https://cate.doc.ic.ac.uk")
+    puts "\nLogin succesful, welcome back #{student.username}!\n"
 
-  downloadModules("CATe Autumn Term 2014-2015", student) 
+    $page = agent.get("https://cate.doc.ic.ac.uk/timetable.cgi?period=#{period}&class=#{student.classes}&keyt=#{year}%3Anone%3Anone%3A#{student.username}")
+    links = $page.parser.xpath('//a[contains(@href, "notes.cgi?key")]').map { |link| link['href'] }.compact.uniq
 
+    ############################################################################
+    #######################      Parse the table       #########################
+    #######################     one row at a time      #########################
+    #######################   get all exercise links   #########################
+    #######################  for each row individually #########################
+    ############################################################################
+    # notes = $page.parser.xpath('//td[contains(@bgcolor, "white")]/a[contains(@href, "notes")]') #.xpath('/td[contains(@bgcolor, "white")]')
+    # rows = $page.parser.xpath('//td[contains(@bgcolor, "#8ef9f9")]/td/td')
+    # puts rows
+    # exercises = $page.parser.xpath('//a[contains(@title, "View exercise specification")]/preceding::node()')#.map{ |link|  link['href'] }
+    # puts exercises
+    # rows = $page.parser.xpath('//table/tr')
+    # module_links = rows.xpath('td/a[contains(@title, "View exercise specification")]')
+    # puts module_links[0]
+    # rows.zip(module_links).each do |row, module_link|
+      # exercises = $page.parser.xpath('//row/a[contains(@title, "View exercise specification")]')#.map{ |link|  link['href'] }
+      
+      # puts module_links[0].xpath('//a[contains(@title, "View exercise specification")]')
+
+      ##### Attempt to parse everything row by row ######ss
+    # end
+    # puts notes
+    download_notes(agent, links, student)
+  rescue Exception => e
+    puts e.message
+  end
   puts "\nAll done! =)"
 rescue Exception => e
   puts "> Something went bad :(\n->" + e.message
