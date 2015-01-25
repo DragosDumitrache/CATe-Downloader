@@ -5,6 +5,7 @@ require 'mechanize'
 require 'date'
 require 'nokogiri'
 require 'io/console'
+require 'optparse'
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # CATe uses the following URL format to dispense files:     
@@ -184,12 +185,33 @@ def download_exercises(agent, module_dir, exercise_row, student)
   Dir.chdir(working_dir)
 end # End download_exercises
 
+def parse(args)
+    $opts = []
+    opt_parser = OptionParser.new do |opts|
+      opts.banner = "Usage: example.rb [options] [path-optional]"
+      opts.separator ""
+      opts.separator "Specific options:"
+      opts.on("-i", "--install", "Install Ruby RVM and dependencies") do |i|
+        system("\\curl -sSL https://get.rvm.io | bash")
+        system("gem install mechanize")
+        system("gem install nokogiri")
+      end
+      opts.on_tail("-h", "--help", "Show this message") do
+        $opts << "-h"
+        puts opts
+        exit
+      end
+    end
+    opt_parser.parse!(args)
+  end #End parse
+
 begin
-system("gem install mechanize")
-system("gem install nokogiri")
 ################################################################################
 #########################          CATe Login        ###########################
 ################################################################################
+  if(!ARGV.empty?)
+    parse(ARGV)
+  end
   print "IC username: "
   username = gets.chomp
   print "IC password: "
