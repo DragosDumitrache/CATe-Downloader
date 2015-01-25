@@ -185,7 +185,7 @@ def download_exercises(agent, module_dir, exercise_row, student)
 end # End download_exercises
 
 begin
-
+`gem install mechanize` unless `gem list`.lines.grep(/^mechanize \(.*\)/)
 ################################################################################
 #########################          CATe Login        ###########################
 ################################################################################
