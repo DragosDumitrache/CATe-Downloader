@@ -98,15 +98,15 @@ def download_notes(agent, links, student)
     notes_page = agent.get(link)
     module_name = notes_page.parser.xpath('//center//h3//b')
     module_name = module_name[module_name.size - 1].inner_html
-    module_number = module_name.split(":")
-    directory_name = "[" + module_number[0] + "] " + module_number[1] 
+    module_name_split = module_name.split(":")
+    module_dir = "[" + module_name_split[0].strip + "] " + module_name_split[1].strip
     working_dir = Dir.pwd
     createDirectory(working_dir) 
     Dir.chdir(working_dir)
-    createDirectory(directory_name)
-    Dir.chdir(directory_name)
+    createDirectory(module_dir)
+    Dir.chdir(module_dir)
     print_equal
-    puts "\nFetching the notes for #{module_name}..."
+    puts "\nFetching the notes for #{module_dir}..."
     print_equal
     notes_dir = "Notes"
     createDirectory(notes_dir)
@@ -133,13 +133,6 @@ def download_notes(agent, links, student)
         end
       else # Download local notes
         puts "Fetching #{note.text()}.pdf..."
-        # if(!note['href'].start_with?("http"))
-        #   local_note = notes_page.uri.merge(note['href'])
-        #   puts "Relative"
-        # else 
-        #   puts "Absolute"
-        #   local_note = note['href']
-        # end
         local_note = "https://cate.doc.ic.ac.uk/" + note['href']
         if(downloadFileFromURL(notes_dir, local_note, student, false, note.text() + ".pdf"))
           puts "\t...Succes, saved as #{note.text()}.pdf"
@@ -173,6 +166,23 @@ def print_equal
     print "="
   end
 end # End print_equal
+
+def download_exercises(agent, module_dir, exercise_row, student)
+  createDirectory(module_dir)
+  working_dir = Dir.pwd
+  Dir.chdir(module_dir)
+  exercise_row.each do |exercise| 
+    createDirectory(exercise.text())
+    exercise_link = "https://cate.doc.ic.ac.uk/" + exercise['href']
+    puts "Fetching #{exercise.text()}.pdf..."
+      if(downloadFileFromURL(exercise.text(), exercise_link, student, false, exercise.text() + ".pdf"))
+        puts "\t...Succes, saved as #{exercise.text()}.pdf"
+      else 
+        puts "\t...Skip, #{exercise.text()}.pdf already exists"
+      end
+  end
+  Dir.chdir(working_dir)
+end # End download_exercises
 
 begin
 
@@ -209,22 +219,22 @@ begin
     #######################   get all exercise links   #########################
     #######################  for each row individually #########################
     ############################################################################
-    # notes = $page.parser.xpath('//td[contains(@bgcolor, "white")]/a[contains(@href, "notes")]') #.xpath('/td[contains(@bgcolor, "white")]')
-    # rows = $page.parser.xpath('//td[contains(@bgcolor, "#8ef9f9")]/td/td')
-    # puts rows
-    # exercises = $page.parser.xpath('//a[contains(@title, "View exercise specification")]/preceding::node()')#.map{ |link|  link['href'] }
-    # puts exercises
-    # rows = $page.parser.xpath('//table/tr')
-    # module_links = rows.xpath('td/a[contains(@title, "View exercise specification")]')
-    # puts module_links[0]
-    # rows.zip(module_links).each do |row, module_link|
-      # exercises = $page.parser.xpath('//row/a[contains(@title, "View exercise specification")]')#.map{ |link|  link['href'] }
-      
-      # puts module_links[0].xpath('//a[contains(@title, "View exercise specification")]')
-
-      ##### Attempt to parse everything row by row ######ss
-    # end
-    # puts notes
+    rows = $page.parser.xpath('//tr[./td/a[contains(@title, "View exercise specification")]]')
+    module_name = Nokogiri::HTML(rows[0].inner_html).xpath('//b[./font]').text()
+    module_name_split = module_name.split("-")
+    module_dir = "[" + module_name_split[0] + "] " + module_name_split[1]
+    rows.each do |row|
+      if(!Nokogiri::HTML(row.inner_html).xpath('//b[./font]').text().nil? && !Nokogiri::HTML(row.inner_html).xpath('//b[./font]').text().empty?)
+        module_name = Nokogiri::HTML(row.inner_html).xpath('//b[./font]').text()
+        module_name_split = module_name.split("-")        
+        module_dir = "[" + module_name_split[0].strip + "] " + module_name_split[1].strip
+        print_equal
+        puts "\nFetching the exercises for #{module_dir}..."
+        print_equal
+      end
+      exercises1 = Nokogiri::HTML(row.inner_html).xpath('//a[contains(@title, "View exercise specification")]')#.map{ |link| link['href']  }
+      download_exercises(agent, module_dir, exercises1, student)
+    end
     download_notes(agent, links, student)
   rescue Exception => e
     puts e.message
