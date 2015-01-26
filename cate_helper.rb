@@ -2,11 +2,8 @@
 
 require 'open-uri'
 require 'mechanize'
-require 'date'
 require 'nokogiri'
 require 'io/console'
-require 'optparse'
-
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # CATe uses the following URL format to dispense files:     
 # https://cate.doc.ic.ac.uk/showfile.cgi?key=CATE_MAGIC_KEY  
