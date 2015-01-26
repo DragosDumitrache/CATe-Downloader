@@ -121,10 +121,11 @@ def download_notes(agent, links, student)
         ########################################################################
         if(note_url.content_type == "application/pdf") 
           puts "Fetching #{note.text()}.pdf..."
+          print_loading
           if(downloadFileFromURL(notes_dir, note['title'], student, false, note.text() + ".pdf"))
-            puts "\t...Succes, saved as #{note.text()}.pdf"
+            puts "\n\t...Succes, saved as #{note.text()}.pdf"
           else 
-            puts "\t...Skip, #{note.text()}.pdf already exists"
+            puts "\n\t...Skip, #{note.text()}.pdf already exists"
           end
         else
           # check for Dulay's Notes
@@ -132,11 +133,12 @@ def download_notes(agent, links, student)
         end
       else # Download local notes
         puts "Fetching #{note.text()}.pdf..."
+        print_loading
         local_note = "https://cate.doc.ic.ac.uk/" + note['href']
         if(downloadFileFromURL(notes_dir, local_note, student, false, note.text() + ".pdf"))
-          puts "\t...Succes, saved as #{note.text()}.pdf"
+          puts "\n\t...Succes, saved as #{note.text()}.pdf"
         else 
-          puts "\t...Skip, #{note.text()}.pdf already exists"
+          puts "\n\t...Skip, #{note.text()}.pdf already exists"
         end
       end
     end
@@ -152,10 +154,11 @@ def download_external_notes(notes_dir, link, student)
   local_notes.each do |local_note| 
     file_name = File.basename(URI.parse(local_note).path)
     puts "Fetching #{file_name}..."
+    print_loading
     if(downloadFileFromURL(notes_dir, local_note, student, false, file_name))
-      puts "\t...Succes, saved as #{file_name}.pdf"
+      puts "\n\t...Succes, saved as #{file_name}.pdf"
     else 
-      puts "\t...Skip, #{file_name}.pdf already exists"
+      puts "\n\t...Skip, #{file_name}.pdf already exists"
     end
   end
 end
@@ -165,6 +168,15 @@ def print_equal
     print "="
   end
 end # End print_equal
+
+def print_loading
+  print "["
+  for i in 2..$cols-2
+    sleep(1.0/60.0)
+    print "#"
+  end
+  print "]"
+end
 
 def download_exercises(agent, module_dir, exercise_row, student)
   resource_dir = "DoC Resources"
@@ -177,23 +189,24 @@ def download_exercises(agent, module_dir, exercise_row, student)
     createDirectory(exercise.text())
     exercise_link = "https://cate.doc.ic.ac.uk/" + exercise['href']
     puts "Fetching #{exercise.text()}.pdf..."
+    print_loading
       if(downloadFileFromURL(exercise.text(), exercise_link, student, false, exercise.text() + ".pdf"))
-        puts "\t...Succes, saved as #{exercise.text()}.pdf"
+        puts "\n\t...Succes, saved as #{exercise.text()}.pdf"
       else 
-        puts "\t...Skip, #{exercise.text()}.pdf already exists"
+        puts "\n\t...Skip, #{exercise.text()}.pdf already exists"
       end
   end
   Dir.chdir(working_dir)
 end # End download_exercises
 
 begin
-################################################################################
-#########################          CATe Login        ###########################
-################################################################################
   if(!ARGV.empty?)
     Dir.chdir(ARGV[0])
     ARGV.pop
   end
+################################################################################
+#########################          CATe Login        ###########################
+################################################################################
   print "IC username: "
   username = gets.chomp
   print "IC password: "
