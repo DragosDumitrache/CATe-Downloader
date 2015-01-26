@@ -101,9 +101,10 @@ def download_notes(agent, links, student)
     module_name = module_name[module_name.size - 1].inner_html
     module_name_split = module_name.split(":")
     module_dir = "[" + module_name_split[0].strip + "] " + module_name_split[1].strip
-    working_dir = Dir.pwd
-    createDirectory(working_dir) 
-    Dir.chdir(working_dir)
+    working_dir = Dir.pwd 
+    resource_dir = "DoC Resources"
+    createDirectory(resource_dir)
+    Dir.chdir(resource_dir)
     createDirectory(module_dir)
     Dir.chdir(module_dir)
     print_equal
@@ -169,8 +170,11 @@ def print_equal
 end # End print_equal
 
 def download_exercises(agent, module_dir, exercise_row, student)
-  createDirectory(module_dir)
+  resource_dir = "DoC Resources"
+  createDirectory(resource_dir)
   working_dir = Dir.pwd
+  Dir.chdir(resource_dir)
+  createDirectory(module_dir)
   Dir.chdir(module_dir)
   exercise_row.each do |exercise| 
     createDirectory(exercise.text())
@@ -185,32 +189,13 @@ def download_exercises(agent, module_dir, exercise_row, student)
   Dir.chdir(working_dir)
 end # End download_exercises
 
-def parse(args)
-    $opts = []
-    opt_parser = OptionParser.new do |opts|
-      opts.banner = "Usage: example.rb [options] [path-optional]"
-      opts.separator ""
-      opts.separator "Specific options:"
-      opts.on("-i", "--install", "Install Ruby RVM and dependencies") do |i|
-        system("\\curl -sSL https://get.rvm.io | bash")
-        system("gem install mechanize")
-        system("gem install nokogiri")
-      end
-      opts.on_tail("-h", "--help", "Show this message") do
-        $opts << "-h"
-        puts opts
-        exit
-      end
-    end
-    opt_parser.parse!(args)
-  end #End parse
-
 begin
 ################################################################################
 #########################          CATe Login        ###########################
 ################################################################################
   if(!ARGV.empty?)
-    parse(ARGV)
+    Dir.chdir(ARGV[0])
+    ARGV.pop
   end
   print "IC username: "
   username = gets.chomp
