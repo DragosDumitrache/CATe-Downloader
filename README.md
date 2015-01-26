@@ -4,6 +4,10 @@ CATe-Downloader
 Downloads notes/specs/data_files/model_answers for all CATe modules and exercises. 
 Courtesy of Mearlboro and Zemellino for creating the original script.
 
+#How to use:
+  If you've never run this script before, chances are you're missing a few gems. To install everything you need, run ./installer.rb. Once that's finished, you are free to run the ./cate_helper.rb.
+  Usage: ./cate_helper.rb [optional-dir]. If [optional-dir] is not null, the notes will be downloaded in that directory. In the event that no path is provided, the notes will be downloaded into the current folder.
+  
 #What's new:
 v2.1
   - Turned into a web parser that downloads notes and exercises automatically
@@ -16,7 +20,7 @@ v2.1
 
 #Updates history:
 v2.0 
-  - Added support for Piazza Notes, Exercises and Model answers
+  - Added support for Piazza Notes, Exercises and Model answers download manually
   - Updated with the latest URLs for notes/specs/data_files/model_answers
   - Aligned output strings to a terminal width of 80
 
