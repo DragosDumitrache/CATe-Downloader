@@ -5,55 +5,14 @@ require 'mechanize'
 require 'nokogiri'
 require 'io/console'
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-# CATe uses the following URL format to dispense files:     
-# https://cate.doc.ic.ac.uk/showfile.cgi?key=CATE_MAGIC_KEY  
-#  
-# where CATE_MAGIC_KEY == YEAR:CONST_ONE:FILE_NUMBER:CLASS:FILE_TYPE:USERNAME  
-#  
-# YEAR        is always 2014 (?)  
-# CONST_ONE   is always 1    (?)  
-# FILE_NUMBER is an integer associated with the file to download
-# CLASS       is your class - one of c1, c2, c3, j1, j2, j3   
-# FILE_TYPE   is one of NOTES, SPECS, DATA, MODELS  
-# USERNAME    is your IC account username   
-#  
-# for instance connecting to:  
-# https://cate.doc.ic.ac.uk/showfile.cgi?key=2014:1:44:c2:DATA:lmc13  
-# will download:  
-# Lab-2.tar.gz - the data file for the second lab assignment in C++ #44
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # This represents an Imperial College student
 #
 # :username => IC account username
 # :password => IC account password     - needed for downloading files from CATe
-# :year     => current year on CATe    - 2014 (?)
+# :year     => the year from which you want to retrieve files from    
 # :classes  => either Computing or JMC - one of c1, c2, c3, j1, j2, j3 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 Student = Struct.new(:username, :password, :year, :classes)
-
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-# This represents a module in Computing course
-#
-# :name      => name of the module as shown on CATe
-# :noteNums  => array of FILE_NUMBER for the note files
-# :exercises => array of Exercise structs for this module
-_Module = Struct.new(:name, :noteNums, :noteURLs, :exercises, :piazza_exercises, :piazza_model_answers)
-
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-# This represents an exercise or assigment 
-#
-# :name     => name of the exercise as shown on CATe
-# :specsNum => FILE_NUMBER for the spec of this exercise
-# :dataNum  => FILE_NUMBER for the data files of this exercise
-# :modelNum => FILE_NUMBER for the model answers of this exercise
-#
-# dataNum and modelNum will be -1 if not provided for an exercise
-Exercise = Struct.new(:name, :specsNum, :dataNum, :modelNum)
-
 
 # Creates a directory in pwd if it doesn't already exist
 def createDirectory(directoryName)
@@ -178,24 +137,52 @@ def print_loading
   print "]"
 end
 
-def download_exercises(agent, module_dir, exercise_row, student)
+def download_exercises(agent, module_dir, exercise_row, given_files, student)
   resource_dir = "DoC Resources"
   createDirectory(resource_dir)
   working_dir = Dir.pwd
   Dir.chdir(resource_dir)
   createDirectory(module_dir)
   Dir.chdir(module_dir)
-  exercise_row.each do |exercise| 
-    createDirectory(exercise.text())
-    exercise_link = "https://cate.doc.ic.ac.uk/" + exercise['href']
-    puts "Fetching #{exercise.text()}.pdf..."
-    print_loading
+    exercise_row.zip(given_files).each do |exercise, givens| 
+      createDirectory(exercise.text())
+      exercise_link = "https://cate.doc.ic.ac.uk/" + exercise['href']
+      
+      puts "Fetching #{exercise.text()}.pdf..."
+      print_loading
       if(downloadFileFromURL(exercise.text(), exercise_link, student, false, exercise.text() + ".pdf"))
         puts "\n\t...Succes, saved as #{exercise.text()}.pdf"
       else 
         puts "\n\t...Skip, #{exercise.text()}.pdf already exists"
       end
-  end
+      
+      if(givens != nil)
+        page = agent.get("https://cate.doc.ic.ac.uk/" + givens['href'])  
+        models = page.parser.xpath('//a[contains(@href, "MODELS")]')
+        models.each do |model| 
+          # createDirectory(model.text())
+          puts "Fetching #{model.text()}..."
+          print_loading
+          local_file = "https://cate.doc.ic.ac.uk/" + model['href']
+          if(downloadFileFromURL(exercise.text(), local_file, student, false, model.text()))
+            puts "\n\t...Succes, saved as #{model.text()}"
+          else 
+            puts "\n\t...Skip, #{model.text()} already exists"
+          end     
+        end
+        data = page.parser.xpath('//a[contains(@href, "DATA")]')
+        data.each do |d| 
+          puts "Fetching #{d.text()}..."
+          print_loading
+          local_file = "https://cate.doc.ic.ac.uk/" + d['href']
+          if(downloadFileFromURL(exercise.text(), local_file, student, false, d.text()))
+            puts "\n\t...Succes, saved as #{d.text()}"
+          else 
+            puts "\n\t...Skip, #{d.text()} already exists"
+          end     
+        end
+      end
+    end
   Dir.chdir(working_dir)
 end # End download_exercises
 
@@ -250,8 +237,9 @@ begin
         puts "\nFetching the exercises for #{module_dir}..."
         print_equal
       end
-      exercises1 = Nokogiri::HTML(row.inner_html).xpath('//a[contains(@title, "View exercise specification")]')#.map{ |link| link['href']  }
-      download_exercises(agent, module_dir, exercises1, student)
+      exercises1 = Nokogiri::HTML(row.inner_html).xpath('//a[contains(@title, "View exercise specification")]')
+      givens = Nokogiri::HTML(row.inner_html).xpath('//a[contains(@href, "given")]')
+      download_exercises(agent, module_dir, exercises1, givens, student)
     end
     download_notes(agent, links, student)
   rescue Exception => e
