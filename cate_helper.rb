@@ -4,6 +4,7 @@ require 'open-uri'
 require 'mechanize'
 require 'nokogiri'
 require 'io/console'
+require 'zlib'
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # This represents an Imperial College student
 #
@@ -22,8 +23,6 @@ end
 # Downloads file from fileURL into targetDir. 
 # Returns false iff file already existed and was not overwritten.
 def downloadFileFromURL(targetDir, fileURL, student, override, fileInName)
-  # puts targetDir + " " + fileURL + " " + username + " " + password + " "
-
   # Open file from web URL, using username and password provided
   # credentials = open("http://cate.doc.ic.ac.uk", :http_basic_authentication => [student.username, student.password])
   fileIn = open(fileURL, :http_basic_authentication => [student.username, student.password])
@@ -39,10 +38,9 @@ def downloadFileFromURL(targetDir, fileURL, student, override, fileInName)
   # Calculate final path where file will be saved
   fileOutPath = targetDir + '/' + fileInName
   # If file already exists only override if true
-  if (!override and File.exists?(fileOutPath)) 
-    return false 
+  if (!override && File.exists?(fileOutPath)) 
+        return false 
   end
-    
   File.open(fileOutPath, 'wb') do |fileOut| 
     fileOut.write fileIn.read 
     return true
@@ -80,24 +78,28 @@ def download_notes(agent, links, student)
         ########################################################################
         if(note_url.content_type == "application/pdf") 
           puts "Fetching #{note.text()}.pdf..."
-          print_loading
           if(downloadFileFromURL(notes_dir, note['title'], student, false, note.text() + ".pdf"))
-            puts "\n\t...Succes, saved as #{note.text()}.pdf"
+            print_loading
+            puts "\n\t...Success, saved as #{note.text()}.pdf"
           else 
-            puts "\n\t...Skip, #{note.text()}.pdf already exists"
+            puts "\t...Skip, #{note.text()}.pdf already exists"
           end
         else
-          # check for Dulay's Notes
-          download_external_notes(notes_dir, note['title'], student)
+          # check for External Notes
+          download_external_notes(notes_dir, note['title'], student, module_dir)
         end
       else # Download local notes
-        puts "Fetching #{note.text()}.pdf..."
-        print_loading
-        local_note = "https://cate.doc.ic.ac.uk/" + note['href']
-        if(downloadFileFromURL(notes_dir, local_note, student, false, note.text() + ".pdf"))
-          puts "\n\t...Succes, saved as #{note.text()}.pdf"
+        name = note.text()
+        # if(File.extname(note.text()) == "")
+        #   name = note.text() + ".pdf" 
+        # end
+        puts "Fetching #{note.text()}..."
+        local_note = agent.page.uri + note['href']
+        if(downloadFileFromURL(notes_dir, local_note, student, false, name))
+          print_loading
+          puts "\n\t...Success, saved as #{name}"
         else 
-          puts "\n\t...Skip, #{note.text()}.pdf already exists"
+          puts "\t...Skip, #{name} already exists"
         end
       end
     end
@@ -105,21 +107,24 @@ def download_notes(agent, links, student)
   end
 end # End download_notes(links)
 
-def download_external_notes(notes_dir, link, student)
+def download_external_notes(notes_dir, link, student, module_dir)
   agent = Mechanize.new
   agent.add_auth(link, student.username, student.password)
   external_page = agent.get(link)
-  local_notes = external_page.parser.xpath('//a[contains(text(), "Slides")]|//a[@class="resource_title"]').map{ |link| link['href']  }
+  local_notes = external_page.parser.xpath('//a[contains(text(), "Slides")]|//a[@class="resource_title"]|//a[contains(text(), "Handout")]').map{ |link| link['href']  }
   local_notes.each do |local_note| 
     file_name = File.basename(URI.parse(local_note).path)
     puts "Fetching #{file_name}..."
-    print_loading
     if(downloadFileFromURL(notes_dir, local_note, student, false, file_name))
-      puts "\n\t...Succes, saved as #{file_name}.pdf"
+      print_loading
+      puts "\n\t...Success, saved as #{file_name}.pdf"
     else 
-      puts "\n\t...Skip, #{file_name}.pdf already exists"
+      puts "\t...Skip, #{file_name}.pdf already exists"
     end
   end
+  tuts = external_page.parser.xpath('//a[contains(text(), "Question")]')
+  sols = external_page.parser.xpath('//a[contains(text(), "Solution")]')
+  download_exercises(agent, module_dir, tuts, sols, student)
 end
 
 def print_equal
@@ -146,39 +151,43 @@ def download_exercises(agent, module_dir, exercise_row, given_files, student)
   Dir.chdir(module_dir)
     exercise_row.zip(given_files).each do |exercise, givens| 
       createDirectory(exercise.text())
-      exercise_link = "https://cate.doc.ic.ac.uk/" + exercise['href']
+      exercise_link = agent.page.uri + exercise['href']
+      name = exercise.text()
+      # if(File.extname(exercise.text()) == "")
+      #     name = exercise.text() + ".pdf" 
+      # end
+      puts "Fetching #{name}..."
       
-      puts "Fetching #{exercise.text()}.pdf..."
-      print_loading
-      if(downloadFileFromURL(exercise.text(), exercise_link, student, false, exercise.text() + ".pdf"))
-        puts "\n\t...Succes, saved as #{exercise.text()}.pdf"
+      if(downloadFileFromURL(exercise.text(), exercise_link, student, false, name))
+        print_loading
+        puts "\n\t...Success, saved as #{name}"
       else 
-        puts "\n\t...Skip, #{exercise.text()}.pdf already exists"
+        puts "\t...Skip, #{name} already exists"
       end
       
       if(givens != nil)
-        page = agent.get("https://cate.doc.ic.ac.uk/" + givens['href'])  
+        page = agent.get(agent.page.uri + givens['href'])  
         models = page.parser.xpath('//a[contains(@href, "MODELS")]')
         models.each do |model| 
           # createDirectory(model.text())
           puts "Fetching #{model.text()}..."
-          print_loading
           local_file = "https://cate.doc.ic.ac.uk/" + model['href']
           if(downloadFileFromURL(exercise.text(), local_file, student, false, model.text()))
-            puts "\n\t...Succes, saved as #{model.text()}"
+            print_loading
+            puts "\n\t...Success, saved as #{model.text()}"
           else 
-            puts "\n\t...Skip, #{model.text()} already exists"
+            puts "\t...Skip, #{model.text()} already exists"
           end     
         end
         data = page.parser.xpath('//a[contains(@href, "DATA")]')
         data.each do |d| 
           puts "Fetching #{d.text()}..."
-          print_loading
           local_file = "https://cate.doc.ic.ac.uk/" + d['href']
           if(downloadFileFromURL(exercise.text(), local_file, student, false, d.text()))
-            puts "\n\t...Succes, saved as #{d.text()}"
+            print_loading
+            puts "\n\t...Success, saved as #{d.text()}"
           else 
-            puts "\n\t...Skip, #{d.text()} already exists"
+            puts "\t...Skip, #{d.text()} already exists"
           end     
         end
       end
@@ -213,7 +222,7 @@ begin
     agent = Mechanize.new
     agent.add_auth('https://cate.doc.ic.ac.uk/' ,student.username, student.password, nil, "https://cate.doc.ic.ac.uk")
     $page = agent.get("https://cate.doc.ic.ac.uk")
-    puts "\nLogin succesful, welcome back #{student.username}!\n"
+    puts "\nLogin Successful, welcome back #{student.username}!\n"
 
     $page = agent.get("https://cate.doc.ic.ac.uk/timetable.cgi?period=#{period}&class=#{student.classes}&keyt=#{year}%3Anone%3Anone%3A#{student.username}")
     links = $page.parser.xpath('//a[contains(@href, "notes.cgi?key")]').map { |link| link['href'] }.compact.uniq
@@ -239,7 +248,7 @@ begin
       end
       exercises1 = Nokogiri::HTML(row.inner_html).xpath('//a[contains(@title, "View exercise specification")]')
       givens = Nokogiri::HTML(row.inner_html).xpath('//a[contains(@href, "given")]')
-      download_exercises(agent, module_dir, exercises1, givens, student)
+      # download_exercises(agent, module_dir, exercises1, givens, student)
     end
     download_notes(agent, links, student)
   rescue Exception => e
