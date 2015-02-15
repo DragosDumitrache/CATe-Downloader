@@ -20,12 +20,23 @@ def create_directory(directory_name)
   Dir.mkdir(directory_name) unless File.exists?(directory_name)
 end
 
-# Downloads file from fileURL into targetDir. 
+# Downloads file from file_URL into target_dir. 
 # Returns false iff file already existed and was not overwritten.
 def download_file_from_URL(target_dir, file_URL, override, file_in_name)
   # Open file from web URL, using username and password provided
   # credentials = open("http://cate.doc.ic.ac.uk", :http_basic_authentication => [$student.username, $student.password])
-  file_in = open(file_URL, :http_basic_authentication => [$student.username, $student.password])
+  working_dir = Dir.pwd
+  file_URL = URI.parse(file_URL.to_s.gsub(/[ ]/, ''))
+  begin
+    file_in = open(file_URL, :http_basic_authentication => [$student.username, $student.password])
+  rescue Exception => e
+    if(e.message == "404 Not Found")
+      puts "404 Oh my! It appears the file has disappeared from the server..."
+    else 
+      puts e.message
+    end
+    return false
+  end
   if(file_in_name == "")
     # Extract file name using this snippet found on SO
     begin 
@@ -36,13 +47,17 @@ def download_file_from_URL(target_dir, file_URL, override, file_in_name)
     end
   end
   # Calculate final path where file will be saved
-  file_out_path = target_dir + '/' + file_in_name
+  if(working_dir == target_dir)
+    file_out_path = file_in_name
+  else 
+    file_out_path = target_dir + "/" + file_in_name
+  end
   # If file already exists only override if true
   if (!override && File.exists?(file_out_path)) 
-        return false 
+    return false 
   end
-  File.open(file_out_path, 'wb') do |file_out| 
-    file_out.write file_in.read 
+  File.open(file_out_path, 'w') do |file_out| 
+    file_out.write file_in.read
     return true
   end
 end   # End of download_file_from_url
@@ -65,7 +80,10 @@ def parse_cate_notes(links)
     print_equal
     notes_dir = "Notes"
     create_directory(notes_dir)
-    notes = notes_page.parser.xpath('//a[contains(@href, "showfile.cgi?key")]|//a[contains(@title, "doc.ic.ac.uk")]|//a[contains(@title, "resources")]')
+    notes = notes_page.parser.xpath('//a[contains(@href, "showfile.cgi?key")]
+                                    |//a[contains(@title, "doc.ic.ac.uk")]
+                                    |//a[contains(@title, "resources")]
+                                    |//a[contains(@title, "imperial.ac.uk")]')
     notes.each do |note|
       if(note['href'] == '')
         note_url = open(note['title'], :http_basic_authentication => [$student.username, $student.password])
@@ -87,6 +105,9 @@ def parse_cate_notes(links)
             end
             if(URI.parse(note['title']).path.include?("~dfg"))
               parse_hardware_course(notes_dir, note['title'], module_dir)  
+            end
+            if(URI.parse(note['title']).path.include?("/211/"))
+              parse_operating_systems(notes_dir, note['title'], module_dir)
             end
           end
         end
@@ -134,7 +155,7 @@ def parse_hardware_course(notes_dir, link, module_dir)
     tuts = Nokogiri::HTML(list_elem.inner_html).xpath('//a[contains(text(), "Question")]')
    
     tuts.each do |tut|
-      if(download_file_from_URL(tutorial_dir, tut['href'], false, "Question Sheet.pdf"))
+      if(download_file_from_URL(module_dir, tut['href'], false, "Question Sheet.pdf"))
         print_loading
         puts "\n\t...Success, saved as Question Sheet.pdf"
       else 
@@ -142,8 +163,36 @@ def parse_hardware_course(notes_dir, link, module_dir)
       end
     end
   end
-  
 end # end parse_hardware_course
+
+def parse_operating_systems(notes_dir, link, module_dir)
+    page = $agent.get(link)
+    tutorials = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, "tutorial")]')
+    links = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, ".pdf")]')
+    links.each do |link|
+      if(!tutorials.include?(link))
+        puts "Fetching #{link['title']}.pdf..."
+        if(download_file_from_URL(notes_dir, link['href'], false, link['title'] + ".pdf"))
+          print_loading
+          puts "\n\t...Success, saved as #{link['title']}.pdf"
+        else 
+          puts "\t...Skip, #{link['title']}.pdf already exists"
+        end     
+      end
+    end
+    tutorials.each do |tut|
+      if(tut.text() != nil && tut.text() == tut['title'])
+        puts "Fetching #{tut['title']}.pdf..."
+        if(download_file_from_URL(Dir.pwd, tut['href'], false, tut['title'] + ".pdf"))
+          print_loading
+          puts "\n\t...Success, saved as #{tut['title']}.pdf"
+        else 
+          puts "\t...Skip, #{tut['title']}.pdf already exists"
+        end     
+      end
+    end      
+end
+
 
 def download_external_files(notes_dir, local_notes, module_dir, link)
   local_notes.each do |local_note| 
@@ -267,21 +316,20 @@ def student_login()
 ################################################################################
 #########################          CATe Login        ###########################
 ################################################################################
-  # print "IC username: "
-  # username = gets.chomp
-  # print "IC password: "
-  # system "stty -echo"
-  # password = gets.chomp
-  # system "stty echo"
-  username = "dd2713"
-  password = "dAyCHT8E"
+  print "IC username: "
+  username = gets.chomp
+  print "IC password: "
+  system "stty -echo"
+  password = gets.chomp
+  system "stty echo"
   puts ""
   print "Class: " 
-  classes = gets.chomp
+  classes = gets.chomp.downcase
   print "1 = Autumn\t2 = Christmas\t3 = Spring\t4 = Easter\t5 = Summer\nPeriod: "
   period = gets.chomp
   print "Academic year: "
   year = gets.chomp
+  Date.strptime(year, "%Y").gregorian? rescue "Invalid year"
   $student = $student.new(username, password, classes, period, year)
 end
 
@@ -306,8 +354,8 @@ begin
                                 "&class=#{$student.classes}&keyt=#{$student.year}%" + 
                                 "3Anone%3Anone%3A#{$student.username}")
     links = $page.parser.xpath('//a[contains(@href, "notes.cgi?key")]').map { |link| link['href'] }.compact.uniq
-    parse_cate_exercises()
-    # parse_cate_notes(links)
+    # parse_cate_exercises()
+    parse_cate_notes(links)
   rescue Exception => e
     puts e.message
   end
