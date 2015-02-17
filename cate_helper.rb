@@ -5,6 +5,7 @@ require 'mechanize'
 require 'nokogiri'
 require 'io/console'
 require 'zlib'
+require 'optparse'
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # This represents an Imperial College $student
 #
@@ -26,16 +27,16 @@ def download_file_from_URL(target_dir, file_URL, override, file_in_name)
   # Open file from web URL, using username and password provided
   # credentials = open("http://cate.doc.ic.ac.uk", :http_basic_authentication => [$student.username, $student.password])
   working_dir = Dir.pwd
-  file_URL = URI.parse(file_URL.to_s.gsub(/[ ]/, ''))
+  file_URL = URI.parse(file_URL.to_s.gsub(" ", ''))
   begin
     file_in = open(file_URL, :http_basic_authentication => [$student.username, $student.password])
-  rescue Exception => e
+  rescue StandardError => e
     if(e.message == "404 Not Found")
       puts "404 Oh my! It appears the file has disappeared from the server..."
     else 
       puts e.message
     end
-    return false
+    return  false
   end
   if(file_in_name == "")
     # Extract file name using this snippet found on SO
@@ -43,7 +44,7 @@ def download_file_from_URL(target_dir, file_URL, override, file_in_name)
       file_in_name = file_in.meta['content-disposition'].match(/filename=(\"?)(.+)\1/)[2]
     rescue Exception => e
       # puts "Unable to find file name" + e.message
-      file_in_name = File.basename(URI.parse(file_URL).path)
+      file_in_name = File.basename(URI.parse(file_URL.to_s).path)
     end
   end
   # Calculate final path where file will be saved
@@ -86,28 +87,30 @@ def parse_cate_notes(links)
                                     |//a[contains(@title, "imperial.ac.uk")]')
     notes.each do |note|
       if(note['href'] == '')
-        note_url = open(note['title'], :http_basic_authentication => [$student.username, $student.password])
-        if(note_url.content_type == "application/pdf") 
-          puts "Fetching #{note.text()}.pdf..."
-          if(download_file_from_URL(notes_dir, note['title'], false, note.text() + ".pdf"))
-            print_loading
-            puts "\n\t...Success, saved as #{note.text()}.pdf"
-          else 
-            puts "\t...Skip, #{note.text()}.pdf already exists"
-          end
-        else
-          if(note_url.content_type == "application/mp4")
+        if(!note['title'].include?("panopto"))
+          note_url = open(note['title'], :http_basic_authentication => [$student.username, $student.password])
+          if(note_url.content_type == "application/pdf") 
+            puts "Fetching #{note.text()}.pdf..."
+            if(download_file_from_URL(notes_dir, note['title'], false, note.text() + ".pdf"))
+              print_loading
+              puts "\n\t...Success, saved as #{note.text()}.pdf"
+            else 
+              puts "\t...Skip, #{note.text()}.pdf already exists"
+            end
+          else
+            if(note_url.content_type == "application/mp4")
 
-          else 
-            # check for External Notes
-            if(URI.parse(note['title']).path.include?("~nd"))
-              parse_dulay_course(notes_dir, note['title'], module_dir)
-            end
-            if(URI.parse(note['title']).path.include?("~dfg"))
-              parse_hardware_course(notes_dir, note['title'], module_dir)  
-            end
-            if(URI.parse(note['title']).path.include?("/211/"))
-              parse_operating_systems(notes_dir, note['title'], module_dir)
+            else 
+              # check for External Notes
+              if(URI.parse(note['title']).path.include?("~nd"))
+                parse_dulay_course(notes_dir, note['title'], module_dir)
+              end
+              if(URI.parse(note['title']).path.include?("~dfg"))
+                parse_hardware_course(notes_dir, note['title'], module_dir)  
+              end
+              if(URI.parse(note['title']).path.include?("/211/"))
+                parse_operating_systems(notes_dir, note['title'], module_dir)
+              end
             end
           end
         end
@@ -153,13 +156,13 @@ def parse_hardware_course(notes_dir, link, module_dir)
     create_directory(tutorial_dir)
     puts "Fetching #{tutorial_dir}..."
     tuts = Nokogiri::HTML(list_elem.inner_html).xpath('//a[contains(text(), "Question")]')
-   
+   # Find a way to parse the solutions from in between comments "
     tuts.each do |tut|
-      if(download_file_from_URL(module_dir, tut['href'], false, "Question Sheet.pdf"))
+      if(download_file_from_URL(tutorial_dir, tut['href'], false, ""))
         print_loading
-        puts "\n\t...Success, saved as Question Sheet.pdf"
+        puts "\n\t...Success"
       else 
-        puts "\t...Skip, Question Sheet.pdf already exists"
+        puts "\t...Skip"
       end
     end
   end
@@ -169,8 +172,9 @@ def parse_operating_systems(notes_dir, link, module_dir)
     page = $agent.get(link)
     tutorials = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, "tutorial")]')
     links = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, ".pdf")]')
+    solutions = page.parser.xpath('//a[contains(@title, "solution")]')
     links.each do |link|
-      if(!tutorials.include?(link))
+      if(!tutorials.include?(link) && !solutions.include?(link))
         puts "Fetching #{link['title']}.pdf..."
         if(download_file_from_URL(notes_dir, link['href'], false, link['title'] + ".pdf"))
           print_loading
@@ -180,6 +184,9 @@ def parse_operating_systems(notes_dir, link, module_dir)
         end     
       end
     end
+    working_dir = Dir.pwd
+    create_directory("Tutorials")
+    Dir.chdir("Tutorials")
     tutorials.each do |tut|
       if(tut.text() != nil && tut.text() == tut['title'])
         puts "Fetching #{tut['title']}.pdf..."
@@ -188,9 +195,17 @@ def parse_operating_systems(notes_dir, link, module_dir)
           puts "\n\t...Success, saved as #{tut['title']}.pdf"
         else 
           puts "\t...Skip, #{tut['title']}.pdf already exists"
-        end     
+        end
       end
-    end      
+    end
+    solutions.each do |sol|
+      if(download_file_from_URL(Dir.pwd, sol['href'], false, ""))
+        print_loading
+        puts "\n\t...Success, saved solution"
+      else 
+        puts "\t...Skip, solution already exists"
+      end          
+    end
 end
 
 
@@ -333,10 +348,34 @@ def student_login()
   $student = $student.new(username, password, classes, period, year)
 end
 
+def parse(args)
+  $opts = []
+  opts_parser = OptionParser.new do |opts|
+    opts.banner = "Usage: example.rb [options] [optional-path]"
+    opts.separator ""
+    opts.separator "Specific options:"
+    opts.on("-i", "--install", "Install all gem dependencies") do |opt|
+      $opts << opt
+      system("gem install mechanize --user-install")
+    end
+    opts.on("") do 
+    end
+    opts.on_tail("-h", "--help", "Show this message") do
+      $opts << "-h"
+      puts opts
+      exit
+    end
+  end
+  opts_parser.parse!(args)
+end
+
 begin
-  if(!ARGV.empty?)
-    Dir.chdir(ARGV[0])
-    ARGV.pop
+  if(ARGV != nil)
+    parse(ARGV)
+    if(Dir.exists?(ARGV.last))
+      Dir.chdir(ARGV.last)
+      ARGV.pop
+    end 
   end
   create_directory("DoC Resources")
   Dir.chdir("Doc Resources")
