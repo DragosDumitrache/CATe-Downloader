@@ -331,12 +331,14 @@ def student_login()
 ################################################################################
 #########################          CATe Login        ###########################
 ################################################################################
-  print "IC username: "
-  username = gets.chomp
-  print "IC password: "
-  system "stty -echo"
-  password = gets.chomp
-  system "stty echo"
+  # print "IC username: "
+  # username = gets.chomp
+  # print "IC password: "
+  # system "stty -echo"
+  # password = gets.chomp
+  # system "stty echo"
+  username = "dd2713"
+  password = "dAyCHT8E"
   puts ""
   print "Class: " 
   classes = gets.chomp.downcase
