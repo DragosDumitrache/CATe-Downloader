@@ -37,7 +37,6 @@ def download_file_from_URL(target_dir, file_URL, override, file_in_name)
       Dir.chdir(working_dir)
       puts "404 Oh my! It appears the file has disappeared from the server..."
     else 
-      Dir.chdir(working_dir)
       # puts e.message
     end
     return  false
@@ -48,7 +47,6 @@ def download_file_from_URL(target_dir, file_URL, override, file_in_name)
       file_in_name = file_in.meta['content-disposition'].match(/filename=(\"?)(.+)\1/)[2]
     rescue Exception => e
       # puts "Unable to find file name" + e.message
-      Dir.chdir(working_dir)
       file_in_name = File.basename(URI.parse(file_URL.to_s).path)
     end
   end
