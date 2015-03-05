@@ -34,10 +34,9 @@ def download_file_from_URL(target_dir, file_URL, override, file_in_name)
     file_in = open(file_URL, :http_basic_authentication => [$student.username, $student.password])
   rescue StandardError => e
     if(e.message == "404 Not Found")
-      Dir.chdir(working_dir)
       puts "404 Oh my! It appears the file has disappeared from the server..."
     else 
-      # puts e.message
+      puts e.message
     end
     return  false
   end
@@ -130,19 +129,17 @@ def download_givens(tutorial_dir, givens)
     page = $agent.get($agent.page.uri + givens['href'])  
     models = page.parser.xpath('//a[contains(@href, "MODELS")]')
     models.each do |model| 
-      if(File.extname(model.text()) == ".mp4")
-        next
+      if(File.extname(model.text()) != ".mp4")
+        local_file = $agent.page.uri + model['href']
+        download_file_from_URL(tutorial_dir, local_file, false, model.text())
       end
-      local_file = $cate_website + model['href']
-      download_file_from_URL(tutorial_dir, local_file, false, model.text())
     end
     data = page.parser.xpath('//a[contains(@href, "DATA")]')
     data.each do |d| 
-      if(File.extname(d.text()) == ".mp4")
-        next
+      if(File.extname(d.text()) != ".mp4")
+        local_file = $agent.page.uri + d['href']
+        download_file_from_URL(tutorial_dir, local_file, false, d.text())
       end
-      local_file = $cate_website + d['href']
-      download_file_from_URL(tutorial_dir, local_file, false, d.text())
     end
   end
 end
@@ -368,7 +365,7 @@ begin
                                 "&class=#{$student.classes}&keyt=#{$student.year}%" + 
                                 "3Anone%3Anone%3A#{$student.username}")
     links = $page.parser.xpath('//a[contains(@href, "notes.cgi?key")]').map { |link| link['href'] }.compact.uniq
-    parse_notes(links)
+    # parse_notes(links)
     parse_cate_exercises()
   rescue Exception => e
     puts e.message
