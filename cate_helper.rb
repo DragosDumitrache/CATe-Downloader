@@ -27,16 +27,18 @@ end
 # Returns false iff file already existed and was not overwritten.
 def download_file_from_URL(target_dir, file_URL, override, file_in_name)
   # Open file from web URL, using username and password provided
-  # credentials = open("http://cate.doc.ic.ac.uk", :http_basic_authentication => [$student.username, $student.password])
   working_dir = Dir.pwd
+  Dir.chdir(target_dir)
   file_URL = file_URL.to_s.gsub(" ", '')
   begin
     file_in = open(file_URL, :http_basic_authentication => [$student.username, $student.password])
   rescue StandardError => e
     if(e.message == "404 Not Found")
+      Dir.chdir(working_dir)
       puts "404 Oh my! It appears the file has disappeared from the server..."
     else 
-      puts e.message
+      Dir.chdir(working_dir)
+      # puts e.message
     end
     return  false
   end
@@ -46,27 +48,108 @@ def download_file_from_URL(target_dir, file_URL, override, file_in_name)
       file_in_name = file_in.meta['content-disposition'].match(/filename=(\"?)(.+)\1/)[2]
     rescue Exception => e
       # puts "Unable to find file name" + e.message
+      Dir.chdir(working_dir)
       file_in_name = File.basename(URI.parse(file_URL.to_s).path)
     end
   end
-  # Calculate final path where file will be saved
-  if(working_dir == target_dir)
-    file_out_path = file_in_name
-  else 
-    file_out_path = target_dir
-  end
+  puts "Fetching #{file_in_name}..."
   # If file already exists only override if true
-  if (!override && File.exists?(file_out_path + "/" + file_in_name)) 
+  if (!override && File.exists?(file_in_name)) 
+    Dir.chdir(working_dir)
+    puts "\t...Skip, #{file_in_name} already exists"
     return false 
   end
-  File.open(file_out_path, 'w') do |file_out| 
+  File.open(file_in_name, 'w') do |file_out| 
     file_out.write file_in.read
+    print_loading
+    puts "\n\t...Success, saved as #{file_in_name}"
+    Dir.chdir(working_dir)
     return true
   end
 end   # End of download_file_from_url
 
+def download_notes(notes, module_dir, current_link)
+  working_dir = Dir.pwd
+  if(!working_dir.include?(module_dir))
+    Dir.chdir(module_dir) 
+  else
+    module_dir = working_dir
+  end
+  create_directory($notes_dir)
+  notes.each do |note|
+    if(note['href'] != "")
+      local_note = note['href']
+    else
+      local_note = note['title']
+    end
+    name = note.text()
+    local_note = local_note.to_s.gsub(" ", '')
+    if(URI(local_note).relative?)
+     local_note = URI.join(current_link, local_note).to_s
+    end
+    local_note = URI.encode(local_note)
+    begin
+      note_url = open(URI.parse(local_note), :http_basic_authentication => [$student.username, $student.password])
+      if(note_url.content_type == "application/pdf") 
+        download_file_from_URL($notes_dir, URI.parse(local_note), false, "")
+      end
+      if(note_url.content_type == "text/html")
+        parse_external_notes(local_note, module_dir)
+      end
+    rescue OpenURI::HTTPError => e
+      if (e.message != "404 Not Found")
+        puts e.message
+      end
+    end
+  end
+  Dir.chdir(working_dir)
+end
+
+def download_exercises(module_dir, exercise_row, given_files)
+  working_dir = Dir.pwd
+  create_directory(module_dir)
+  Dir.chdir(module_dir)
+  exercise_row.zip(given_files).each do |exercise, givens|
+    if(URI(exercise['href']).relative?)
+      exercise_link = URI.join($cate_website, exercise['href']).to_s
+    end 
+    name = exercise.text()
+    if(File.extname(name) == ".mp4")
+        next
+    end
+    create_directory(name)
+    if(File.extname(name) == "")
+      file_name = name + ".pdf" 
+    end
+    download_file_from_URL(name, exercise_link, false, file_name)
+    download_givens(name, givens)
+  end
+  Dir.chdir(working_dir)
+end # End download_exercises
+
+def download_givens(tutorial_dir, givens)
+  if(givens != nil)
+    page = $agent.get($agent.page.uri + givens['href'])  
+    models = page.parser.xpath('//a[contains(@href, "MODELS")]')
+    models.each do |model| 
+      if(File.extname(model.text()) == ".mp4")
+        next
+      end
+      local_file = $cate_website + model['href']
+      download_file_from_URL(tutorial_dir, local_file, false, model.text())
+    end
+    data = page.parser.xpath('//a[contains(@href, "DATA")]')
+    data.each do |d| 
+      if(File.extname(d.text()) == ".mp4")
+        next
+      end
+      local_file = $cate_website + d['href']
+      download_file_from_URL(tutorial_dir, local_file, false, d.text())
+    end
+  end
+end
+
 def parse_notes(links)
-  # A MESS - CLEAN UP
   links.each do |link|
     if(URI(link).relative?)
       link = URI.join($cate_website, link).to_s
@@ -90,42 +173,6 @@ def parse_notes(links)
   end
 end # End parse_cate_notes(links)
 
-
-def download_notes(notes, module_dir, current_link)
-  working_dir = Dir.pwd
-  Dir.chdir(module_dir)
-  create_directory($notes_dir)
-  notes.each do |note|
-    if(note['href'] != "")
-      local_note = note['href']
-    else
-      local_note = note['title']
-    end
-    name = note.text()
-    if(URI(local_note).relative?)
-     local_note = URI.join(current_link, local_note).to_s
-    end
-    local_note = URI.encode(local_note)
-    if(File.extname(name) == "")
-      name = name + ".pdf" 
-    end
-    note_url = open(URI.parse(local_note), :http_basic_authentication => [$student.username, $student.password])
-    if(note_url.content_type == "application/pdf") 
-      puts "Fetching #{name}..."
-      if(download_file_from_URL($notes_dir, URI.parse(local_note), false, name))
-        print_loading
-        puts "\n\t...Success, saved as #{name}"
-      else 
-        puts "\t...Skip, #{name} already exists"
-      end
-    end
-    if(note_url.content_type == "text/html")
-      parse_external_notes(local_note, module_dir)
-    end
-  end
-  Dir.chdir(working_dir)
-end
-
 def parse_external_notes(url, module_dir)
   if(URI.parse(url).path.include?("~nd"))
     parse_dulay_course(url, module_dir)
@@ -145,8 +192,8 @@ def parse_dulay_course(link, module_dir)
   $agent.add_auth(link, $student.username, $student.password)
   external_page = $agent.get(link)
   local_notes = external_page.parser.xpath(%(//a[contains(text(), "Slides")]
-                    | //a[@class="resource_title"])).map{ |link| link['href']  }
-  download_external_files($notes_dir, local_notes, module_dir, link)
+                    | //a[@class="resource_title"]))
+  download_notes(local_notes, module_dir, link)
 end # end parse_dulay_course
 
 def parse_hardware_course(link, module_dir)
@@ -154,7 +201,7 @@ def parse_hardware_course(link, module_dir)
   external_page = $agent.get(link)
   local_notes = external_page.parser.xpath(%(//a[contains(text(), "Slides")]
                     | //a[contains(text(), "Handout")])).map{ |l| l['href']  }
-  download_external_files($notes_dir, local_notes, module_dir, link)
+  download_notes(local_notes, module_dir, link)
   list = external_page.parser.xpath('//li[contains(text(), "Tutorial")]')
   list.each do |list_elem|
     working_dir = Dir.pwd
@@ -165,12 +212,7 @@ def parse_hardware_course(link, module_dir)
     tuts = Nokogiri::HTML(list_elem.inner_html).xpath('//a[contains(text(), "Question")]')
    # Find a way to parse the solutions from in between comments "
     tuts.each do |tut|
-      if(download_file_from_URL(tutorial_dir, tut['href'], false, ""))
-        print_loading
-        puts "\n\t...Success"
-      else 
-        puts "\t...Skip"
-      end
+      download_file_from_URL(tutorial_dir, tut['href'], false, "")
     end
   end
 end # end parse_hardware_course
@@ -178,116 +220,41 @@ end # end parse_hardware_course
 def parse_operating_systems(link, module_dir)
     page = $agent.get(link)
     tutorials = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, "tutorial")]')
-    links = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, ".pdf")]')
+    local_notes = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, ".pdf")]')
     solutions = page.parser.xpath('//a[contains(@title, "solution")]')
-    links.each do |link|
-      if(!tutorials.include?(link) && !solutions.include?(link))
-        puts "Fetching #{link['title']}.pdf..."
-        if(download_file_from_URL($notes_dir, link['href'], false, link['title'] + ".pdf"))
-          print_loading
-          puts "\n\t...Success, saved as #{link['title']}.pdf"
-        else 
-          puts "\t...Skip, #{link['title']}.pdf already exists"
-        end     
-      end
-    end
+    local_notes = local_notes.to_a
+    local_notes.delete_if { |note| tutorials.include?(note) || solutions.include?(note)}
     working_dir = Dir.pwd
+    download_notes(local_notes, module_dir, link)
+    
     create_directory("Tutorials")
     Dir.chdir("Tutorials")
     tutorials.each do |tut|
       if(tut.text() != nil && tut.text() == tut['title'])
-        puts "Fetching #{tut['title']}.pdf..."
-        if(download_file_from_URL(Dir.pwd, tut['href'], false, tut['title'] + ".pdf"))
-          print_loading
-          puts "\n\t...Success, saved as #{tut['title']}.pdf"
-        else 
-          puts "\t...Skip, #{tut['title']}.pdf already exists"
-        end
+        download_file_from_URL(Dir.pwd, tut['href'], false, tut['title'] + ".pdf")
       end
     end
     solutions.each do |sol|
-      if(download_file_from_URL(Dir.pwd, sol['href'], false, ""))
-        print_loading
-        puts "\n\t...Success, saved solution"
-      else 
-        puts "\t...Skip, solution already exists"
-      end          
+      download_file_from_URL(Dir.pwd, sol['href'], false, "")
     end
 end
 
 def parse_networks(link, module_dir)
-    puts link
     page = $agent.get(link)
-    tutorials = page.parser.xpath('//div[@class = "data-table"]//a[contains(title, "Exercise sheet")]')
-    links = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, "slides")]')
-    solutions = page.parser.xpath('//a[contains(@title, "solutions")]')
-    links.each do |link|
-      if(!tutorials.include?(link) && !solutions.include?(link))
-        puts "Fetching #{link['title']}.pdf..."
-        if(download_file_from_URL($notes_dir, link['href'], false, link['title'] + ".pdf"))
-          print_loading
-          puts "\n\t...Success, saved as #{link['title']}.pdf"
-        else 
-          puts "\t...Skip, #{link['title']}.pdf already exists"
-        end     
-      end
-    end
+    tuts_sols = page.parser.xpath('//div[@class = "data-table"]//a[contains(@title, "Exercise")]
+                                                              |//a[contains(text(), "Worksheet")]')
+    local_notes = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, "slides")]
+                                                                |//a[contains(text(), "Slides")]
+                                                                |//a[contains(text(), "Handouts")]')
+    local_notes = local_notes.to_a
+    local_notes.delete_if { |note| tuts_sols.include?(note)}
+    download_notes(local_notes, module_dir, link)
     working_dir = Dir.pwd
     create_directory("Tutorials")
     Dir.chdir("Tutorials")
-    tutorials.each do |tut|
-      if(tut.text() != nil && tut.text() == tut['title'])
-        puts "Fetching #{tut['title']}.pdf..."
-        if(download_file_from_URL(Dir.pwd, tut['href'], false, tut['title'] + ".pdf"))
-          print_loading
-          puts "\n\t...Success, saved as #{tut['title']}.pdf"
-        else 
-          puts "\t...Skip, #{tut['title']}.pdf already exists"
-        end
-      end
+    tuts_sols.each do |tut|
+      download_file_from_URL(Dir.pwd, tut['href'], false, "")
     end
-    solutions.each do |sol|
-      if(download_file_from_URL(Dir.pwd, sol['href'], false, ""))
-        print_loading
-        puts "\n\t...Success, saved solution"
-      else 
-        puts "\t...Skip, solution already exists"
-      end          
-    end
-end
-
-def download_external_files(notes_dir, local_notes, module_dir, link)
-  local_notes.each do |local_note| 
-    file_name = File.basename(URI.parse(local_note).path)
-    if(URI(local_note).relative?)
-      local_note = URI.join(link, local_note).to_s
-    end
-    if(File.extname(file_name) == "")
-        file_name = file_name + ".pdf" 
-    end
-    puts "Fetching #{file_name}..."
-    if(download_file_from_URL(notes_dir, local_note, false, file_name))
-      print_loading
-      puts "\n\t...Success, saved as #{file_name}"
-    else 
-      puts "\t...Skip, #{file_name} already exists"
-    end
-  end
-end
-
-def print_equal
-  for i in 1..$cols
-    print "="
-  end
-end # End print_equal
-
-def print_loading
-  print "["
-  for i in 2..$cols-2
-    sleep(1.0/60.0)
-    print "#"
-  end
-  print "]"
 end
 
 def parse_cate_exercises() 
@@ -307,71 +274,47 @@ def parse_cate_exercises()
     else
       module_dir = $saved_module
     end
-    exercises1 = Nokogiri::HTML(row.inner_html).xpath('//a[contains(@title, "View exercise specification")]')
+    exercise_row = Nokogiri::HTML(row.inner_html).xpath('//a[contains(@title, "View exercise specification")]')
     givens = Nokogiri::HTML(row.inner_html).xpath('//a[contains(@href, "given")]')
-    download_exercises(module_dir, exercises1, givens)
+    download_exercises(module_dir, exercise_row, givens)
   end
 end # end parse_cate_exercises
 
-def download_exercises(module_dir, exercise_row, given_files)
-  working_dir = Dir.pwd
-  create_directory(module_dir)
-  Dir.chdir(module_dir)
-  exercise_row.zip(given_files).each do |exercise, givens|
-    if(URI(exercise['href']).relative?)
-      link = URI.join("https://cate.doc.ic.ac.uk", exercise['href']).to_s
-    end 
-    exercise_link = link
-    name = exercise.text()
-    if(File.extname(name) == ".mp4")
-        next
+def parse(args)
+  $opts = []
+  opts_parser = OptionParser.new do |opts|
+    opts.banner = "Usage: example.rb [options] [optional-path]"
+    opts.separator ""
+    opts.separator "Specific options:"
+    opts.on("-i", "--install", "Install all gem dependencies") do |opt|
+      $opts << opt
+      ARGV.remove(opt)
+      system("gem install mechanize --user-install")
     end
-    create_directory(name)    
-    puts "Fetching #{name}..."
-    if(File.extname(name) == "")
-      file_name = name + ".pdf" 
-    end
-    if(download_file_from_URL(name, exercise_link, false, file_name))
-      print_loading
-      puts "\n\t...Success, saved as #{file_name}"
-    else 
-      puts "\t...Skip, #{file_name} already exists"
-    end
-    
-    if(givens != nil)
-      page = $agent.get($agent.page.uri + givens['href'])  
-      models = page.parser.xpath('//a[contains(@href, "MODELS")]')
-      models.each do |model| 
-        if(File.extname(model.text()) == ".mp4")
-          next
-        end
-        puts "Fetching #{model.text()}..."
-        local_file = "https://cate.doc.ic.ac.uk/" + model['href']
-        if(download_file_from_URL(name, local_file, false, model.text()))
-          print_loading
-          puts "\n\t...Success, saved as #{model.text()}"
-        else 
-          puts "\t...Skip, #{model.text()} already exists"
-        end     
+    opts.on("-p", "--path", "Download all materials to path or PWD") do |opt|
+      $opts << opt
+      ARGV.delete(opt)
+      if(ARGV.empty?)
+        ARGV << Dir.pwd
       end
-      data = page.parser.xpath('//a[contains(@href, "DATA")]')
-      data.each do |d| 
-        if(File.extname(d.text()) == ".mp4")
-          next
-        end
-        puts "Fetching #{d.text()}..."
-        local_file = "https://cate.doc.ic.ac.uk/" + d['href']
-        if(download_file_from_URL(name, local_file, false, d.text()))
-          print_loading
-          puts "\n\t...Success, saved as #{d.text()}"
-        else 
-          puts "\t...Skip, #{d.text()} already exists"
-        end     
+      if(Dir.exists?(ARGV.last))
+        Dir.chdir(ARGV.last)
+        ARGV.pop
+      else
+        create_directory(ARGV.last)
+        Dir.chdir(ARGV.last)
+        ARGV.pop
       end
+    end
+    opts.on_tail("-h", "--help", "Show this message") do |opt|
+      $opts << opt
+      ARGV.delete(opt)
+      puts opts
+      exit
     end
   end
-  Dir.chdir(working_dir)
-end # End download_exercises
+  opts_parser.parse!(args)
+end
 
 def student_login()
 ################################################################################
@@ -394,37 +337,24 @@ def student_login()
   $student = $student.new(username, password, classes, period, year)
 end
 
-def parse(args)
-  $opts = []
-  opts_parser = OptionParser.new do |opts|
-    opts.banner = "Usage: example.rb [options] [optional-path]"
-    opts.separator ""
-    opts.separator "Specific options:"
-    opts.on("-i", "--install", "Install all gem dependencies") do |opt|
-      $opts << opt
-      system("gem install mechanize --user-install")
-    end
-    opts.on("") do 
-    end
-    opts.on_tail("-h", "--help", "Show this message") do
-      $opts << "-h"
-      puts opts
-      exit
-    end
+def print_equal
+  for i in 1..$cols
+    print "="
   end
-  opts_parser.parse!(args)
+end # End print_equal
+
+def print_loading
+  print "["
+  for i in 2..$cols-2
+    sleep(1.0/60.0)
+    print "#"
+  end
+  print "]"
 end
 
 begin
-  if(!ARGV.empty?)
-    # parse(ARGV)
-    if(Dir.exists?(ARGV.last))
-      Dir.chdir(ARGV.last)
-      ARGV.pop
-    end 
-  end
+  parse(ARGV)
   create_directory("DoC Resources")
-  # $doc_resources = File.path(Dir.pwd + "/DoC Resources")
   Dir.chdir("DoC Resources")
   student_login()
   $rows, $cols = IO.console.winsize
@@ -440,13 +370,14 @@ begin
                                 "&class=#{$student.classes}&keyt=#{$student.year}%" + 
                                 "3Anone%3Anone%3A#{$student.username}")
     links = $page.parser.xpath('//a[contains(@href, "notes.cgi?key")]').map { |link| link['href'] }.compact.uniq
-    # parse_cate_exercises()
     parse_notes(links)
-    # parse_networks(doc_resources, "http://www3.imperial.ac.uk/computing/teaching/courses/212/lecturesandtuts", Dir.pwd)
+    parse_cate_exercises()
   rescue Exception => e
     puts e.message
   end
   puts "\nAll done! =)"
-rescue Exception => e
-  puts "> Something went bad :(\n->" + e.message
+rescue StandardError => e
+  if(e.message != "exit")
+    puts "> Something went bad :(\n->" + e.message
+  end
 end
