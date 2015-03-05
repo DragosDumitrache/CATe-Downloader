@@ -1,5 +1,12 @@
 #!/usr/bin/env ruby
 
+
+begin 
+  gem 'mechanize', ">=2.7"
+rescue Gem::LoadError => e
+  system("gem install mechanize")
+  Gem.clear_paths
+end
 require 'open-uri'
 require 'mechanize'
 require 'nokogiri'
@@ -205,7 +212,7 @@ def parse_hardware_course(link, module_dir)
     create_directory(tutorial_dir)
     puts "Fetching #{tutorial_dir}..."
     tuts = Nokogiri::HTML(list_elem.inner_html).xpath('//a[contains(text(), "Question")]')
-   # Find a way to parse the solutions from in between comments "
+   #TODO Find a way to parse the solutions from in between comments "
     tuts.each do |tut|
       download_file_from_URL(tutorial_dir, tut['href'], false, "")
     end
@@ -281,11 +288,6 @@ def parse(args)
     opts.banner = "Usage: example.rb [options] [optional-path]"
     opts.separator ""
     opts.separator "Specific options:"
-    opts.on("-i", "--install", "Install all gem dependencies") do |opt|
-      $opts << opt
-      ARGV.remove(opt)
-      system("gem install mechanize --user-install")
-    end
     opts.on("-p", "--path", "Download all materials to path or PWD") do |opt|
       $opts << opt
       ARGV.delete(opt)
@@ -326,7 +328,7 @@ def student_login()
   classes = gets.chomp.downcase
   print "1 = Autumn\t2 = Christmas\t3 = Spring\t4 = Easter\t5 = Summer\nPeriod: "
   period = gets.chomp
-  print "Academic year: "
+  print "Academic year e.g 2014:\n"
   year = gets.chomp
   Date.strptime(year, "%Y").gregorian? rescue "Invalid year"
   $student = $student.new(username, password, classes, period, year)
@@ -361,11 +363,11 @@ begin
     puts "\nLogin Successful, welcome back #{$student.username}!\n"
 
     $page = $agent.
-            get("https://cate.doc.ic.ac.uk/timetable.cgi?period=#{$student.period}" + 
-                                "&class=#{$student.classes}&keyt=#{$student.year}%" + 
-                                "3Anone%3Anone%3A#{$student.username}")
+            get("#{$cate_website}/timetable.cgi?period=#{$student.period}" + 
+                       "&class=#{$student.classes}&keyt=#{$student.year}%" + 
+                       "3Anone%3Anone%3A#{$student.username}")
     links = $page.parser.xpath('//a[contains(@href, "notes.cgi?key")]').map { |link| link['href'] }.compact.uniq
-    # parse_notes(links)
+    parse_notes(links)
     parse_cate_exercises()
   rescue Exception => e
     puts e.message
