@@ -99,7 +99,7 @@ def parse_cate_notes(links)
             end
           else
             if(note_url.content_type == "application/mp4")
-
+              # do nothing
             else 
               # check for External Notes
               if(URI.parse(note['title']).path.include?("~nd"))
@@ -109,7 +109,10 @@ def parse_cate_notes(links)
                 parse_hardware_course(notes_dir, note['title'], module_dir)  
               end
               if(URI.parse(note['title']).path.include?("/211/"))
-                parse_operating_systems(notes_dir, note['title'], module_dir)
+                parse_operating_systems(notes_dir, note['href'], module_dir)
+              end
+               if(URI.parse(note['title']).path.include?("/212/"))
+                parse_networks(notes_dir, note['href'], module_dir)
               end
             end
           end
@@ -208,7 +211,46 @@ def parse_operating_systems(notes_dir, link, module_dir)
     end
 end
 
-
+def parse_networks(notes_dir, link, module_dir)
+    puts link
+    page = $agent.get(link)
+    tutorials = page.parser.xpath('//div[@class = "data-table"]//a[contains(title, "Exercise sheet")]')
+    links = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, "slides")]')
+    solutions = page.parser.xpath('//a[contains(@title, "solutions")]')
+    links.each do |link|
+      if(!tutorials.include?(link) && !solutions.include?(link))
+        puts "Fetching #{link['title']}.pdf..."
+        if(download_file_from_URL(notes_dir, link['href'], false, link['title'] + ".pdf"))
+          print_loading
+          puts "\n\t...Success, saved as #{link['title']}.pdf"
+        else 
+          puts "\t...Skip, #{link['title']}.pdf already exists"
+        end     
+      end
+    end
+    working_dir = Dir.pwd
+    create_directory("Tutorials")
+    Dir.chdir("Tutorials")
+    tutorials.each do |tut|
+      if(tut.text() != nil && tut.text() == tut['title'])
+        puts "Fetching #{tut['title']}.pdf..."
+        if(download_file_from_URL(Dir.pwd, tut['href'], false, tut['title'] + ".pdf"))
+          print_loading
+          puts "\n\t...Success, saved as #{tut['title']}.pdf"
+        else 
+          puts "\t...Skip, #{tut['title']}.pdf already exists"
+        end
+      end
+    end
+    solutions.each do |sol|
+      if(download_file_from_URL(Dir.pwd, sol['href'], false, ""))
+        print_loading
+        puts "\n\t...Success, saved solution"
+      else 
+        puts "\t...Skip, solution already exists"
+      end          
+    end
+end
 def download_external_files(notes_dir, local_notes, module_dir, link)
   local_notes.each do |local_note| 
     file_name = File.basename(URI.parse(local_note).path)
@@ -226,7 +268,6 @@ def download_external_files(notes_dir, local_notes, module_dir, link)
       puts "\t...Skip, #{file_name} already exists"
     end
   end
-  
 end
 
 def print_equal
@@ -331,14 +372,12 @@ def student_login()
 ################################################################################
 #########################          CATe Login        ###########################
 ################################################################################
-  # print "IC username: "
-  # username = gets.chomp
-  # print "IC password: "
-  # system "stty -echo"
-  # password = gets.chomp
-  # system "stty echo"
-  username = "dd2713"
-  password = "dAyCHT8E"
+  print "IC username: "
+  username = gets.chomp
+  print "IC password: "
+  system "stty -echo"
+  password = gets.chomp
+  system "stty echo"
   puts ""
   print "Class: " 
   classes = gets.chomp.downcase
@@ -372,8 +411,8 @@ def parse(args)
 end
 
 begin
-  if(ARGV != nil)
-    parse(ARGV)
+  if(!ARGV.empty?)
+    # parse(ARGV)
     if(Dir.exists?(ARGV.last))
       Dir.chdir(ARGV.last)
       ARGV.pop
