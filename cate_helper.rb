@@ -368,7 +368,7 @@ begin
                        "&class=#{$student.classes}&keyt=#{$student.year}%" + 
                        "3Anone%3Anone%3A#{$student.username}")
     links = $page.parser.xpath('//a[contains(@href, "notes.cgi?key")]').map { |link| link['href'] }.compact.uniq
-    # parse_notes(links)
+    parse_notes(links)
     parse_cate_exercises()
   rescue Exception => e
     puts e.message
