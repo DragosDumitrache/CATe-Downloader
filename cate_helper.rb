@@ -162,7 +162,6 @@ def parse_notes(links)
     module_name = module_name[module_name.size - 1].inner_html
     module_name_split = module_name.split(":")
     module_dir = "[" + module_name_split[0].strip + "] " + module_name_split[1].strip
-    puts module_dir
     create_directory(module_dir)
     print_equal
     puts "\nFetching the notes for #{module_dir}..."
@@ -267,7 +266,6 @@ def parse_cate_exercises()
     if( !Nokogiri::HTML(row.inner_html).xpath('//b[./font]').text().empty?)
       module_name = Nokogiri::HTML(row.inner_html).xpath('//b[./font]').text()
       module_dir = module_name
-      puts module_dir
       print_equal
       puts "\nFetching the exercises for #{module_dir}..."
       print_equal
