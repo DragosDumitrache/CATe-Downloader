@@ -272,7 +272,6 @@ def parse_cate_exercises()
       else
         module_dir = "[" + module_name_split[0].strip + "] " + module_name_split[1].strip
       end
-      puts module_dir
       print_equal
       puts "\nFetching the exercises for #{module_dir}..."
       print_equal
