@@ -4,7 +4,7 @@
 begin 
   gem 'mechanize', ">=2.7"
 rescue Gem::LoadError => e
-  system("gem install mechanize")
+  system("sudo gem install mechanize")
   Gem.clear_paths
 end
 require 'open-uri'
