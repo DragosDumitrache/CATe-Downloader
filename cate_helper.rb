@@ -1,6 +1,4 @@
 #!/usr/bin/env ruby
-
-
 begin 
   gem 'mechanize', ">=2.7"
 rescue Gem::LoadError => e
@@ -16,15 +14,59 @@ require 'optparse'
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # This represents an Imperial College $student
 #
-# :username => IC account username
-# :password => IC account password     - needed for downloading files from CATe
-# :year     => the year from which you want to retrieve files from    
-# :classes  => either Computing or JMC - one of c1, c2, c3, j1, j2, j3 
+# @username => IC account username
+# @password => IC account password     - needed for downloading files from CATe
+# @year     => the year from which you want to retrieve files from    
+# @classes  => either Computing or JMC - one of c1, c2, c3, j1, j2, j3 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-$student = Struct.new(:username, :password, :classes, :period, :year)
 
-$cate_website = "https://cate.doc.ic.ac.uk"
-$notes_dir = "Notes"
+$strings_used = {
+  cate: "https://cate.doc.ic.ac.uk",
+  notes_dir: "Notes",
+  spec: "View exercise specification"
+}
+
+$parsing_strings = {
+  href: '//a[contains(@href, "%s")]',
+  title: '//a[contains(@title, "%s")]',
+  inner_title: '/a[contains(@title, "%s")]',
+  data_table: '//div[@class = "data-table"]',
+  text: '//a[contains(text(), "%s")]',
+  link_class: '//a[@class = "%s"]'
+
+}
+class Student
+  attr_reader :username, :password, :period, :classes, :year
+  def initialize(username, password, classes, period, year)
+    @username = username
+    @password = password
+    @classes = classes
+    @period = period
+    @year = year
+  end
+end
+
+module FormatMethods
+  @@rows, @@cols = IO.console.winsize
+  def print_equal
+    for i in 1..@@cols
+      print "="
+    end
+  end # End print_equal
+
+  def print_loading
+    print "["
+    for i in 2..@@cols-2
+      sleep(1.0/60.0)
+      print "#"
+    end
+    print "]"
+  end
+  def format_text(text)
+    return text.gsub("\t\n ", "").strip
+  end
+end
+
 # Creates a directory in pwd if it doesn't already exist
 def create_directory(directory_name)
   Dir.mkdir(directory_name) unless File.exists?(directory_name)
@@ -34,6 +76,7 @@ end
 # Returns false iff file already existed and was not overwritten.
 def download_file_from_URL(target_dir, file_URL, override, file_in_name)
   # Open file from web URL, using username and password provided
+  include FormatMethods
   working_dir = Dir.pwd
   Dir.chdir(target_dir)
   file_URL = file_URL.to_s.gsub(" ", '')
@@ -45,7 +88,7 @@ def download_file_from_URL(target_dir, file_URL, override, file_in_name)
     else 
       puts e.message
     end
-    return  false
+    return false
   end
   if(file_in_name == "")
     # Extract file name using this snippet found on SO
@@ -79,7 +122,7 @@ def download_notes(notes, module_dir, current_link)
   else
     module_dir = working_dir
   end
-  create_directory($notes_dir)
+  create_directory($strings_used[:notes_dir])
   notes.each do |note|
     if(note['href'] != "")
       local_note = note['href']
@@ -87,15 +130,15 @@ def download_notes(notes, module_dir, current_link)
       local_note = note['title']
     end
     name = note.text()
-    local_note = local_note.to_s.gsub(" ", '')
+    local_note = format_text(local_note)
     if(URI(local_note).relative?)
-     local_note = URI.join(current_link, local_note).to_s
+      local_note = URI.join(current_link, local_note).to_s
     end
     local_note = URI.encode(local_note)
     begin
       note_url = open(URI.parse(local_note), :http_basic_authentication => [$student.username, $student.password])
       if(note_url.content_type == "application/pdf") 
-        download_file_from_URL($notes_dir, URI.parse(local_note), false, "")
+        download_file_from_URL($strings_used[:notes_dir], URI.parse(local_note), false, "")
       end
       if(note_url.content_type == "text/html")
         parse_external_notes(local_note, module_dir)
@@ -115,9 +158,10 @@ def download_exercises(module_dir, exercise_row, given_files)
   Dir.chdir(module_dir)
   exercise_row.zip(given_files).each do |exercise, givens|
     if(URI(exercise['href']).relative?)
-      exercise_link = URI.join($cate_website, exercise['href']).to_s
+      exercise_link = URI.join($strings_used[:cate], exercise['href']).to_s
     end 
     name = exercise.text()
+    name = format_text(name)
     if(File.extname(name) == ".mp4")
         next
     end
@@ -125,6 +169,7 @@ def download_exercises(module_dir, exercise_row, given_files)
     if(File.extname(name) == "")
       file_name = name + ".pdf" 
     end
+    # file_name = format_text(file_name)
     download_file_from_URL(name, exercise_link, false, file_name)
     download_givens(name, givens)
   end
@@ -134,27 +179,22 @@ end # End download_exercises
 def download_givens(tutorial_dir, givens)
   if(givens != nil)
     page = $agent.get($agent.page.uri + givens['href'])  
-    models = page.parser.xpath('//a[contains(@href, "MODELS")]')
-    models.each do |model| 
-      if(File.extname(model.text()) != ".mp4")
-        local_file = $agent.page.uri + model['href']
-        download_file_from_URL(tutorial_dir, local_file, false, model.text())
-      end
-    end
-    data = page.parser.xpath('//a[contains(@href, "DATA")]')
-    data.each do |d| 
-      if(File.extname(d.text()) != ".mp4")
-        local_file = $agent.page.uri + d['href']
-        download_file_from_URL(tutorial_dir, local_file, false, d.text())
+    given_files= page.parser.xpath($parsing_strings[:href] % "MODELS" + "|" +
+                                   $parsing_strings[:href] % "DATA")     
+    given_files.each do |given| 
+      if(File.extname(given.text()) != ".mp4")
+        local_file = $agent.page.uri + given['href']
+        download_file_from_URL(tutorial_dir, local_file, false, given.text())
       end
     end
   end
 end
 
 def parse_notes(links)
+  include FormatMethods
   links.each do |link|
     if(URI(link).relative?)
-      link = URI.join($cate_website, link).to_s
+      link = URI.join($strings_used[:cate], link).to_s
     end
     notes_page = $agent.get(link)
     working_dir = Dir.pwd 
@@ -162,15 +202,14 @@ def parse_notes(links)
     module_name = module_name[module_name.size - 1].inner_html
     module_name_split = module_name.split(":")
     module_dir = "[" + module_name_split[0].strip + "] " + module_name_split[1].strip
-    puts module_dir
     create_directory(module_dir)
     print_equal
     puts "\nFetching the notes for #{module_dir}..."
     print_equal
-    local_notes = notes_page.parser.xpath('//a[contains(@href, "showfile.cgi?key")]')
-    external_note_pages = notes_page.parser.xpath('//a[contains(@title, "doc.ic.ac.uk")]
-                                                  |//a[contains(@title, "resources")]
-                                                  |//a[contains(@title, "imperial.ac.uk")]')
+    local_notes = notes_page.parser.xpath($parsing_strings[:href] % "showfile.cgi?key")
+    external_note_pages = notes_page.parser.xpath($parsing_strings[:title] % "doc.ic.ac.uk" + 
+                                                  "|" + $parsing_strings[:title] % "resources" + 
+                                                  "|" + $parsing_strings[:title] % "imperial.ac.uk")
     download_notes(local_notes, module_dir, $agent.page.uri)
     download_notes(external_note_pages, module_dir, $agent.page.uri)
   end
@@ -194,16 +233,16 @@ end
 def parse_dulay_course(link, module_dir)
   $agent.add_auth(link, $student.username, $student.password)
   external_page = $agent.get(link)
-  local_notes = external_page.parser.xpath(%(//a[contains(text(), "Slides")]
-                    | //a[@class="resource_title"]))
+  local_notes = external_page.parser.xpath($parsing_strings[:href] % "Slides" + "|" +
+                                           $parsing_strings[:link_class] % "resource_title")
   download_notes(local_notes, module_dir, link)
 end # end parse_dulay_course
 
 def parse_hardware_course(link, module_dir)
   $agent.add_auth(link, $student.username, $student.password)
   external_page = $agent.get(link)
-  local_notes = external_page.parser.xpath(%(//a[contains(text(), "Slides")]
-                    | //a[contains(text(), "Handout")])).map{ |l| l['href']  }
+  local_notes = external_page.parser.xpath($parsing_strings[:text] % "Slides" + "|" +
+                                           $parsing_strings[:text] % "Handout").map{ |l| l['href'] }
   download_notes(local_notes, module_dir, link)
   list = external_page.parser.xpath('//li[contains(text(), "Tutorial")]')
   list.each do |list_elem|
@@ -212,7 +251,7 @@ def parse_hardware_course(link, module_dir)
     tutorial_dir = tutorial_dir[0].gsub("\n", " ").gsub("  ", " ").strip
     create_directory(tutorial_dir)
     puts "Fetching #{tutorial_dir}..."
-    tuts = Nokogiri::HTML(list_elem.inner_html).xpath('//a[contains(text(), "Question")]')
+    tuts = Nokogiri::HTML(list_elem.inner_html).xpath($parsing_strings[:text] % "Question")
    #TODO Find a way to parse the solutions from in between comments "
     tuts.each do |tut|
       download_file_from_URL(tutorial_dir, tut['href'], false, "")
@@ -222,9 +261,11 @@ end # end parse_hardware_course
 
 def parse_operating_systems(link, module_dir)
     page = $agent.get(link)
-    tutorials = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, "tutorial")]')
-    local_notes = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, ".pdf")]')
-    solutions = page.parser.xpath('//a[contains(@title, "solution")]')
+    tutorials = page.parser.xpath($parsing_strings[:data_table] + 
+                                  $parsing_strings[:href] % "tutorial")
+    local_notes = page.parser.xpath($parsing_strings[:data_table] + 
+                                    $parsing_strings[:href] % ".pdf")
+    solutions = page.parser.xpath($parsing_strings[:title] % "solution")
     local_notes = local_notes.to_a
     local_notes.delete_if { |note| tutorials.include?(note) || solutions.include?(note)}
     working_dir = Dir.pwd
@@ -244,11 +285,13 @@ end
 
 def parse_networks(link, module_dir)
     page = $agent.get(link)
-    tuts_sols = page.parser.xpath('//div[@class = "data-table"]//a[contains(@title, "Exercise")]
-                                                              |//a[contains(text(), "Worksheet")]')
-    local_notes = page.parser.xpath('//div[@class = "data-table"]//a[contains(@href, "slides")]
-                                                                |//a[contains(text(), "Slides")]
-                                                                |//a[contains(text(), "Handouts")]')
+    tuts_sols = page.parser.xpath($parsing_strings[:data_table] +
+                                  $parsing_strings[:title] % "Exercise" + "|" + 
+                                  $parsing_strings[:text] % "Worksheet")
+    local_notes = page.parser.xpath($parsing_strings[:data_table] +
+                                    $parsing_strings[:href] % "slides" + "|" +
+                                    $parsing_strings[:text] % "Slides")# + "|" + 
+                                    #$parsing_strings[:text] % "Handouts")
     local_notes = local_notes.to_a
     local_notes.delete_if { |note| tuts_sols.include?(note)}
     download_notes(local_notes, module_dir, link)
@@ -260,9 +303,9 @@ def parse_networks(link, module_dir)
     end
 end
 
-def parse_cate_exercises() 
-  rows = $page.parser.xpath('//tr[./td/a[contains(@title, 
-                              "View exercise specification")]]')
+def parse_cate_exercises
+  include FormatMethods 
+  rows = $page.parser.xpath('//tr[./td' + $parsing_strings[:inner_title] % $strings_used[:spec] + "]")
   rows.each do |row|
     if( !Nokogiri::HTML(row.inner_html).xpath('//b[./font]').text().empty?)
       module_name = Nokogiri::HTML(row.inner_html).xpath('//b[./font]').text()
@@ -281,8 +324,8 @@ def parse_cate_exercises()
     else
       module_dir = $saved_module
     end
-    exercise_row = Nokogiri::HTML(row.inner_html).xpath('//a[contains(@title, "View exercise specification")]')
-    givens = Nokogiri::HTML(row.inner_html).xpath('//a[contains(@href, "given")]')
+    exercise_row = Nokogiri::HTML(row.inner_html).xpath($parsing_strings[:title] % $strings_used[:spec])
+    givens = Nokogiri::HTML(row.inner_html).xpath($parsing_strings[:href] % "given")
     download_exercises(module_dir, exercise_row, givens)
   end
 end # end parse_cate_exercises
@@ -336,22 +379,7 @@ def student_login()
   print "Academic year e.g 2014:\n"
   year = gets.chomp
   Date.strptime(year, "%Y").gregorian? rescue "Invalid year"
-  $student = $student.new(username, password, classes, period, year)
-end
-
-def print_equal
-  for i in 1..$cols
-    print "="
-  end
-end # End print_equal
-
-def print_loading
-  print "["
-  for i in 2..$cols-2
-    sleep(1.0/60.0)
-    print "#"
-  end
-  print "]"
+  $student = Student.new(username, password, classes, period, year)
 end
 
 begin
@@ -359,7 +387,7 @@ begin
   create_directory("DoC Resources")
   Dir.chdir("DoC Resources")
   student_login()
-  $rows, $cols = IO.console.winsize
+  
   begin
     $agent = Mechanize.new
     $agent.add_auth('https://cate.doc.ic.ac.uk/' ,$student.username, 
@@ -367,11 +395,11 @@ begin
     $page = $agent.get("https://cate.doc.ic.ac.uk")
     puts "\nLogin Successful, welcome back #{$student.username}!\n"
 
-    $page = $agent.
-            get("#{$cate_website}/timetable.cgi?period=#{$student.period}" + 
+    $page = $agent.get($strings_used[:cate] + 
+                       "/timetable.cgi?period=#{$student.period}" + 
                        "&class=#{$student.classes}&keyt=#{$student.year}%" + 
                        "3Anone%3Anone%3A#{$student.username}")
-    links = $page.parser.xpath('//a[contains(@href, "notes.cgi?key")]').map { |link| link['href'] }.compact.uniq
+    links = $page.parser.xpath($parsing_strings[:href] % "notes.cgi?key").map { |link| link['href'] }.compact.uniq
     parse_notes(links)
     parse_cate_exercises()
   rescue Exception => e
